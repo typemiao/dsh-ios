@@ -28,7 +28,20 @@ echo "==> output dir:        $OUT"
 # Clone BEFORE cd -- on a fresh checkout nodejs-mobile/ does not exist yet.
 if [ ! -f "$REPO/configure" ]; then
   echo "==> cloning capawesome nodejs-mobile (branch update22-9-0) into $REPO ..."
-  git clone --depth 1 --branch update22-9-0 https://github.com/capawesome-team/nodejs-mobile.git "$REPO"
+  # GitHub can transiently fail a shallow clone ("error processing shallow
+  # info"); retry, then fall back to a full single-branch clone.
+  for attempt in 1 2 3; do
+    if git clone --depth 1 --branch update22-9-0 https://github.com/capawesome-team/nodejs-mobile.git "$REPO"; then
+      break
+    fi
+    echo "==> shallow clone attempt $attempt failed - retrying"
+    rm -rf "$REPO"
+    sleep 5
+  done
+  if [ ! -d "$REPO/.git" ]; then
+    echo "==> falling back to full single-branch clone"
+    git clone --single-branch --branch update22-9-0 https://github.com/capawesome-team/nodejs-mobile.git "$REPO"
+  fi
   # Pin the exact commit the patches/ were built against (update22-9-0 tip at
   # handover). If upstream moves the branch, deepen the history and check out
   # the pinned commit; if even that fails, the git apply step below reports it.

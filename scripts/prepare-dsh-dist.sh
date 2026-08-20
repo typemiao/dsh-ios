@@ -66,17 +66,9 @@ echo "==> pnpm deploy --prod @deepseek-ai/dsh -> $STAGE"
 rm -rf "$STAGE"
 pnpm --filter @deepseek-ai/dsh deploy --prod --config.inject-workspace-packages=true "$STAGE"
 
-# sanity: the bundle/profile packages must all be present
-for pkg in @deepseek-ai/dsh-base @deepseek-ai/dsh-web-app \
-           @deepseek-ai/dsh-web-frontend @deepseek-ai/dsh-app-boot \
-           @deepseek-ai/cordis-plugin-loader @deepseek-ai/dsh-cmdline; do
-  if [ ! -f "$STAGE/node_modules/$pkg/package.json" ]; then
-    echo "missing $pkg in deploy output" >&2
-    exit 1
-  fi
-done
-find "$STAGE" -name index.html -path "*dsh-web-frontend*" | grep -q . \
-  || { echo "web frontend dist missing" >&2; exit 1; }
+# sanity checks moved BELOW the layout repairs: pnpm 11's legacy deploy (forced
+# via forceLegacyDeploy) drops some transitive workspace packages (e.g.
+# @deepseek-ai/dsh-web-frontend) that step 3 restores from the checkout.
 
 # -- 3. layout repairs ------------------------------------------------------
 cd "$STAGE"
@@ -125,7 +117,7 @@ for name in sorted(referenced):
         print("WARN: missing from repo:", name)
         continue
     os.makedirs(dst, exist_ok=True)
-    for item in ('lib', 'package.json', 'cordis.patch.yml', 'config'):
+    for item in ('lib', 'dist', 'package.json', 'cordis.patch.yml', 'config'):
         s = os.path.join(src, item)
         if os.path.exists(s):
             d = os.path.join(dst, item)
@@ -158,6 +150,18 @@ for name, target in real.items():
     os.symlink(os.path.relpath(target, top), os.path.join(top, name.split('/')[1]))
 print("top-level @deepseek-ai links:", len(real))
 PYEOF
+
+# sanity (post-repair): the bundle/profile packages and the web UI must be present
+for pkg in @deepseek-ai/dsh-base @deepseek-ai/dsh-web-app \
+           @deepseek-ai/dsh-web-frontend @deepseek-ai/dsh-app-boot \
+           @deepseek-ai/cordis-plugin-loader @deepseek-ai/dsh-cmdline; do
+  if [ ! -f "$STAGE/node_modules/$pkg/package.json" ]; then
+    echo "missing $pkg in payload after repairs" >&2
+    exit 1
+  fi
+done
+find "$STAGE" -name index.html -path "*dsh-web-frontend*" | grep -q . \
+  || { echo "web frontend dist missing after repairs" >&2; exit 1; }
 
 # 3c. native-addon stubs
 echo "==> installing pure-JS stubs (node-addon-require-builtin, node-pty, sharp)"
