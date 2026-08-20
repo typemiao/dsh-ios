@@ -85,8 +85,15 @@ jobs:
       - name: Install pnpm 11.7.0
         run: npm i -g pnpm@11.7.0
 
-      - name: Clone deepseek-harness (public repo, default branch master)
-        run: git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness "$HOME/deepseek-harness"
+      - name: Clone deepseek-harness (public repo, pinned to the commit the iOS build was validated against)
+        run: |
+          git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness "$HOME/deepseek-harness"
+          # 99151657c0 = master as of 2026-08-15, the exact state the Mac
+          # session used (boot-web.js APIs + pnpm deploy behavior). master has
+          # drifted since; do not follow it.
+          git -C "$HOME/deepseek-harness" fetch --depth 1 origin 99151657c0
+          git -C "$HOME/deepseek-harness" checkout -q FETCH_HEAD
+          git -C "$HOME/deepseek-harness" log -1 --oneline
 
       - name: Assemble dsh runnable payload
         run: ./scripts/prepare-dsh-dist.sh "$HOME/deepseek-harness" "$RUNNER_TEMP/payload"

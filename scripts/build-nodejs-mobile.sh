@@ -24,16 +24,17 @@ OUT="${2:-$(cd "$(dirname "$0")/.." && pwd)/deps}"
 
 echo "==> nodejs-mobile repo: $REPO"
 echo "==> output dir:        $OUT"
-cd "$REPO"
 
-if [ ! -f configure ]; then
-  echo "==> cloning capawesome nodejs-mobile (branch update22-9-0)…"
-  git clone --depth 1 --branch update22-9-0 https://github.com/capawesome-team/nodejs-mobile.git .
+# Clone BEFORE cd — on a fresh checkout nodejs-mobile/ does not exist yet.
+if [ ! -f "$REPO/configure" ]; then
+  echo "==> cloning capawesome nodejs-mobile (branch update22-9-0) into $REPO…"
+  git clone --depth 1 --branch update22-9-0 https://github.com/capawesome-team/nodejs-mobile.git "$REPO"
   # Pin the exact commit the patches/ were built against (update22-9-0 tip at
   # handover). If upstream moves the branch, the git apply step below fails
   # loudly instead of producing a subtly broken framework.
-  git fetch --depth 1 origin 106c51f9 && git checkout -q FETCH_HEAD || true
+  (cd "$REPO" && git fetch --depth 1 origin 106c51f9 && git checkout -q FETCH_HEAD) || true
 fi
+cd "$REPO"
 
 # ── apply the iOS build patches ─────────────────────────────────────────────
 # The update22-9-0 branch does not build for iOS as-is (its tip commit is
