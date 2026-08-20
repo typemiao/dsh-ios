@@ -90,9 +90,10 @@ jobs:
           git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness "$HOME/deepseek-harness"
           # 99151657c0 = master as of 2026-08-15, the exact state the Mac
           # session used (boot-web.js APIs + pnpm deploy behavior). master has
-          # drifted since; do not follow it.
-          git -C "$HOME/deepseek-harness" fetch --depth 1 origin 99151657c0
-          git -C "$HOME/deepseek-harness" checkout -q FETCH_HEAD
+          # drifted since; do not follow it. (Fetch by --shallow-since: GitHub
+          # refuses fetching an unadvertised SHA from a shallow clone.)
+          git -C "$HOME/deepseek-harness" fetch --shallow-since=2026-08-01 origin master
+          git -C "$HOME/deepseek-harness" checkout -q 99151657c0
           git -C "$HOME/deepseek-harness" log -1 --oneline
 
       - name: Assemble dsh runnable payload

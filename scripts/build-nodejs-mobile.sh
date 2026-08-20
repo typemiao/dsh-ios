@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-REPO="${1:-$(cd "$(dirname "$0")/../nodejs-mobile" && pwd)}"
+REPO="${1:-$(cd "$(dirname "$0")/.." && pwd)/nodejs-mobile}"
 OUT="${2:-$(cd "$(dirname "$0")/.." && pwd)/deps}"
 
 echo "==> nodejs-mobile repo: $REPO"
@@ -30,9 +30,12 @@ if [ ! -f "$REPO/configure" ]; then
   echo "==> cloning capawesome nodejs-mobile (branch update22-9-0) into $REPO…"
   git clone --depth 1 --branch update22-9-0 https://github.com/capawesome-team/nodejs-mobile.git "$REPO"
   # Pin the exact commit the patches/ were built against (update22-9-0 tip at
-  # handover). If upstream moves the branch, the git apply step below fails
-  # loudly instead of producing a subtly broken framework.
-  (cd "$REPO" && git fetch --depth 1 origin 106c51f9 && git checkout -q FETCH_HEAD) || true
+  # handover). If upstream moves the branch, deepen the history and check out
+  # the pinned commit; if even that fails, the git apply step below reports it.
+  (cd "$REPO" && \
+   if [ "$(git rev-parse HEAD)" != "106c51f9" ]; then \
+     git fetch --shallow-since=2026-01-01 origin update22-9-0 && git checkout -q 106c51f9; \
+   fi) || true
 fi
 cd "$REPO"
 
