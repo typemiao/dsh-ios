@@ -1,0 +1,18 @@
+// Copyright 2023 the V8 project authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "src/base/base-export.h"
+#include "src/base/build_config.h"
+
+namespace v8::base {
+
+#if V8_HAS_PTHREAD_JIT_WRITE_PROTECT && defined(V8_OS_IOS)
+// jitless milestone: V8 is built with --jitless, so there is no JIT write
+// protection to toggle. Stub out the pthread thunk (the iOS SDK marks
+// pthread_jit_write_protect_np unavailable). Re-enable the real thunk only
+// when a JIT is attached via StikDebug.
+V8_BASE_EXPORT void SetJitWriteProtected(int enable) {}
+#endif
+
+}  // namespace v8::base

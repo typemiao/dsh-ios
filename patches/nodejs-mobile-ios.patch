@@ -1,0 +1,237 @@
+diff --git a/deps/v8/src/base/platform/platform-ios.cc b/deps/v8/src/base/platform/platform-ios.cc
+--- a/deps/v8/src/base/platform/platform-ios.cc
++++ b/deps/v8/src/base/platform/platform-ios.cc
+@@ -5,18 +5,14 @@
+ #include "src/base/base-export.h"
+ #include "src/base/build_config.h"
+ 
+-// pthread_jit_write_protect_np is marked as not available in the iOS
+-// SDK but it is there for the iOS simulator. So we provide a thunk
+-// and a forward declaration in a compilation target that doesn't
+-// include pthread.h to avoid the compiler error.
+-extern "C" void pthread_jit_write_protect_np(int enable);
+-
+ namespace v8::base {
+ 
+ #if V8_HAS_PTHREAD_JIT_WRITE_PROTECT && defined(V8_OS_IOS)
+-V8_BASE_EXPORT void SetJitWriteProtected(int enable) {
+-  pthread_jit_write_protect_np(enable);
+-}
++// jitless milestone: V8 is built with --jitless, so there is no JIT write
++// protection to toggle. Stub out the pthread thunk (the iOS SDK marks
++// pthread_jit_write_protect_np unavailable). Re-enable the real thunk only
++// when a JIT is attached via StikDebug.
++V8_BASE_EXPORT void SetJitWriteProtected(int enable) {}
+ #endif
+ 
+ }  // namespace v8::base
+diff --git a/tools/ios-framework/NodeMobile.xcodeproj/project.pbxproj b/tools/ios-framework/NodeMobile.xcodeproj/project.pbxproj
+index 400da5d1..02587b4b 100644
+--- a/tools/ios-framework/NodeMobile.xcodeproj/project.pbxproj
++++ b/tools/ios-framework/NodeMobile.xcodeproj/project.pbxproj
+@@ -21,6 +21,13 @@
+ 		D9A7619D1F7C63A8006AFE86 /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 331917C21EC4702A00F93D52 /* CoreFoundation.framework */; };
+ 		D9A7619E1F7C63A8006AFE86 /* libcares.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3376C9191EC3922F0007AD59 /* libcares.a */; };
+ 		D9A761A21F7C63A8006AFE86 /* libnghttp2.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 334822141F6AFBD200CF403E /* libnghttp2.a */; };
++		2A012D29A7DB476C9270D229 /* libsqlite.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2936CBCC80734520B4A8CABC /* libsqlite.a */; };
++		BB071E76E7344B4FBD8A1E64 /* libnbytes.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 149B6C016639473F8587004F /* libnbytes.a */; };
++		4C9DC2F600E44A6D866C30C7 /* libsimdjson.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3BD1AF87B60F4215B2A2D7B3 /* libsimdjson.a */; };
++		477FC37DFA1347DEBE938715 /* libncrypto.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 278F7A04A88F45FE9F878023 /* libncrypto.a */; };
++		EF090CAC545649D587F862CD /* libv8_turboshaft.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1019F7F32CE342EEB7CE7A70 /* libv8_turboshaft.a */; };
++		DBAA5D5CECDD48148A62E3FB /* libv8_abseil.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 15CB748970054A4F9143A291 /* libv8_abseil.a */; };
++		8D07FE24326C447F9F294DE4 /* libv8_initializers_slow.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C3B57D046BCC4A51848B0894 /* libv8_initializers_slow.a */; };
+ 		D9A761A31F7C63A8006AFE86 /* libnode.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3376C91D1EC3922F0007AD59 /* libnode.a */; };
+ 		D9A761A41F7C63A8006AFE86 /* libopenssl.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3376C91E1EC3922F0007AD59 /* libopenssl.a */; };
+ 		D9A761A51F7C63A8006AFE86 /* libuv.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3376C91F1EC3922F0007AD59 /* libuv.a */; };
+@@ -55,6 +62,13 @@
+ 		33300EC1240437AB0019E302 /* libv8_snapshot.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libv8_snapshot.a; path = bin/libv8_snapshot.a; sourceTree = "<group>"; };
+ 		334822141F6AFBD200CF403E /* libnghttp2.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libnghttp2.a; path = bin/libnghttp2.a; sourceTree = "<group>"; };
+ 		3376C9191EC3922F0007AD59 /* libcares.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libcares.a; path = bin/libcares.a; sourceTree = "<group>"; };
++		2936CBCC80734520B4A8CABC /* libsqlite.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libsqlite.a; path = bin/libsqlite.a; sourceTree = "<group>"; };
++		149B6C016639473F8587004F /* libnbytes.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libnbytes.a; path = bin/libnbytes.a; sourceTree = "<group>"; };
++		3BD1AF87B60F4215B2A2D7B3 /* libsimdjson.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libsimdjson.a; path = bin/libsimdjson.a; sourceTree = "<group>"; };
++		278F7A04A88F45FE9F878023 /* libncrypto.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libncrypto.a; path = bin/libncrypto.a; sourceTree = "<group>"; };
++		1019F7F32CE342EEB7CE7A70 /* libv8_turboshaft.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libv8_turboshaft.a; path = bin/libv8_turboshaft.a; sourceTree = "<group>"; };
++		15CB748970054A4F9143A291 /* libv8_abseil.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libv8_abseil.a; path = bin/libv8_abseil.a; sourceTree = "<group>"; };
++		C3B57D046BCC4A51848B0894 /* libv8_initializers_slow.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libv8_initializers_slow.a; path = bin/libv8_initializers_slow.a; sourceTree = "<group>"; };
+ 		3376C91D1EC3922F0007AD59 /* libnode.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libnode.a; path = bin/libnode.a; sourceTree = "<group>"; };
+ 		3376C91E1EC3922F0007AD59 /* libopenssl.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libopenssl.a; path = bin/libopenssl.a; sourceTree = "<group>"; };
+ 		3376C91F1EC3922F0007AD59 /* libuv.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libuv.a; path = bin/libuv.a; sourceTree = "<group>"; };
+@@ -105,6 +119,13 @@
+ 				D9A761A21F7C63A8006AFE86 /* libnghttp2.a in Frameworks */,
+ 				F6860EE32ACD492E00070ED3 /* libbase64_neon64.a in Frameworks */,
+ 				F6860EE12ACD491900070ED3 /* libada.a in Frameworks */,
++				2A012D29A7DB476C9270D229 /* libsqlite.a in Frameworks */,
++				BB071E76E7344B4FBD8A1E64 /* libnbytes.a in Frameworks */,
++				4C9DC2F600E44A6D866C30C7 /* libsimdjson.a in Frameworks */,
++				477FC37DFA1347DEBE938715 /* libncrypto.a in Frameworks */,
++				EF090CAC545649D587F862CD /* libv8_turboshaft.a in Frameworks */,
++				DBAA5D5CECDD48148A62E3FB /* libv8_abseil.a in Frameworks */,
++				8D07FE24326C447F9F294DE4 /* libv8_initializers_slow.a in Frameworks */,
+ 				D9A761A31F7C63A8006AFE86 /* libnode.a in Frameworks */,
+ 				F6D008C32AD14FAE00FB3D3D /* libbase64_sse41.a in Frameworks */,
+ 				D9A761A41F7C63A8006AFE86 /* libopenssl.a in Frameworks */,
+diff --git a/tools/ios_framework_prepare.sh b/tools/ios_framework_prepare.sh
+index 98858660..9375d9a0 100755
+--- a/tools/ios_framework_prepare.sh
++++ b/tools/ios_framework_prepare.sh
+@@ -27,6 +27,10 @@ declare -a outputs_common=(
+     "libllhttp.a"
+     "libnghttp2.a"
+     "libnghttp3.a"
++    "libncrypto.a"
++    "libsimdjson.a"
++    "libnbytes.a"
++    "libsqlite.a"
+     "libngtcp2.a"
+     "libnode.a"
+     "libopenssl.a"
+@@ -39,6 +43,9 @@ declare -a outputs_common=(
+     "libv8_libbase.a"
+     "libv8_libplatform.a"
+     "libv8_snapshot.a"
++    "libv8_initializers_slow.a"
++    "libv8_abseil.a"
++    "libv8_turboshaft.a"
+     "libv8_zlib.a"
+     "libzlib.a"
+ )
+@@ -57,8 +64,25 @@ declare -a outputs_arm64_only=(
+ declare -a outputs_x64=("${outputs_common[@]}" "${outputs_x64_only[@]}")
+ declare -a outputs_arm64=("${outputs_common[@]}" "${outputs_arm64_only[@]}")
+ 
++
++patch_host_mks() {
++  # nodejs-mobile/gyp quirk with Xcode 26: the Makefile generator leaks the
++  # iOS SDK (-isysroot <iPhoneOS.sdk> -miphoneos-version-min) into HOST-tool
++  # targets (node_js2c, mksnapshot, torque, ...). Host tools linked against
++  # the iOS SDK are iOS binaries that macOS refuses to execute (SIGKILL).
++  # Point every *.host.mk at the macOS SDK instead.
++  local mac_sdk
++  mac_sdk="$(xcrun --sdk macosx --show-sdk-path)"
++  while IFS= read -r mk; do
++    sed -i '' "s|/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/[^\"]*|$mac_sdk|g" "$mk"
++    sed -i '' "s|/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/[^\"]*|$mac_sdk|g" "$mk"
++    sed -i '' 's|-miphoneos-version-min=14.0|-mmacosx-version-min=13.0|g' "$mk"
++    sed -i '' 's|-mios-simulator-version-min=14.0|-mmacosx-version-min=13.0|g' "$mk"
++  done < <(find out -name '*.host.mk' 2>/dev/null)
++}
++
+ build_for_arm64_device() {
+-  make clean
++  [ "${SKIP_CLEAN:-0}" != "1" ] && make clean
+   GYP_DEFINES="target_arch=arm64 host_os=mac target_os=ios"
+   export GYP_DEFINES
+   ./configure \
+@@ -71,17 +95,18 @@ build_for_arm64_device() {
+     --v8-options=--jitless \
+     --without-node-code-cache \
+     --without-node-snapshot
+-  make -j$(getconf _NPROCESSORS_ONLN)
++  patch_host_mks
++  make -j"${MAKE_JOBS:-$(getconf _NPROCESSORS_ONLN)}"
+ 
+   # Move compilation outputs
+   mkdir -p $TARGET_LIBRARY_PATH/arm64-device
+   for output_file in "${outputs_arm64[@]}"; do
+-    cp $LIBRARY_PATH/$output_file $TARGET_LIBRARY_PATH/arm64-device/
++    [ -f $LIBRARY_PATH/$output_file ] && cp $LIBRARY_PATH/$output_file $TARGET_LIBRARY_PATH/arm64-device/ || true
+   done
+ }
+ 
+ build_for_arm64_simulator() {
+-  make clean
++  [ "${SKIP_CLEAN:-0}" != "1" ] && make clean
+   GYP_DEFINES="target_arch=arm64 host_os=mac target_os=ios"
+   export GYP_DEFINES
+   ./configure \
+@@ -95,12 +120,13 @@ build_for_arm64_simulator() {
+     --without-node-code-cache \
+     --without-node-snapshot \
+     --ios-simulator
+-  make -j$(getconf _NPROCESSORS_ONLN)
++  patch_host_mks
++  make -j"${MAKE_JOBS:-$(getconf _NPROCESSORS_ONLN)}"
+ 
+   # Move compilation outputs
+   mkdir -p $TARGET_LIBRARY_PATH/arm64-simulator
+   for output_file in "${outputs_arm64[@]}"; do
+-      cp $LIBRARY_PATH/$output_file $TARGET_LIBRARY_PATH/arm64-simulator/
++      [ -f $LIBRARY_PATH/$output_file ] && cp $LIBRARY_PATH/$output_file $TARGET_LIBRARY_PATH/arm64-simulator/ || true
+   done
+ }
+ 
+@@ -118,12 +144,13 @@ build_for_x64_simulator() {
+     --v8-options=--jitless \
+     --without-node-code-cache \
+     --without-node-snapshot
+-  arch -x86_64 make -j$(getconf _NPROCESSORS_ONLN)
++  patch_host_mks
++  arch -x86_64 make -j"${MAKE_JOBS:-$(getconf _NPROCESSORS_ONLN)}"
+ 
+   # Move compilation outputs
+   mkdir -p $TARGET_LIBRARY_PATH/x64-simulator
+   for output_file in "${outputs_x64[@]}"; do
+-    cp $LIBRARY_PATH/$output_file $TARGET_LIBRARY_PATH/x64-simulator/
++    [ -f $LIBRARY_PATH/$output_file ] && cp $LIBRARY_PATH/$output_file $TARGET_LIBRARY_PATH/x64-simulator/ || true
+   done
+ }
+ 
+@@ -131,11 +158,11 @@ build_framework_for_arm64_device() {
+   # Move libraries to the correct location
+   for output_file in "${outputs_arm64[@]}"; do
+     rm -f $TARGET_LIBRARY_PATH/$output_file
+-    mv $TARGET_LIBRARY_PATH/arm64-device/$output_file $TARGET_LIBRARY_PATH/$output_file
++    [ -f $TARGET_LIBRARY_PATH/arm64-device/$output_file ] && mv $TARGET_LIBRARY_PATH/arm64-device/$output_file $TARGET_LIBRARY_PATH/$output_file
+   done
+   # Remove libraries that do not exist for this target
+   cp $XCODE_PROJECT_PATH $XCODE_PROJECT_PATH.bak
+-  for output_file in "${outputs_x64_only[@]}"; do
++  for output_file in "${outputs_x64_only[@]}" "libbase64.a" "libbase64_neon64.a"; do
+     grep -vF "$output_file" $XCODE_PROJECT_PATH > temp && mv temp $XCODE_PROJECT_PATH
+   done
+   # Compile the Framework Xcode project for arm64 device
+@@ -153,11 +180,11 @@ build_framework_for_arm64_simulator() {
+   # Move libraries to the correct location
+   for output_file in "${outputs_arm64[@]}"; do
+     rm -f $TARGET_LIBRARY_PATH/$output_file
+-    mv $TARGET_LIBRARY_PATH/arm64-simulator/$output_file $TARGET_LIBRARY_PATH/$output_file
++    [ -f $TARGET_LIBRARY_PATH/arm64-simulator/$output_file ] && mv $TARGET_LIBRARY_PATH/arm64-simulator/$output_file $TARGET_LIBRARY_PATH/$output_file
+   done
+   # Remove libraries that do not exist for this target
+   cp $XCODE_PROJECT_PATH $XCODE_PROJECT_PATH.bak
+-  for output_file in "${outputs_x64_only[@]}"; do
++  for output_file in "${outputs_x64_only[@]}" "libbase64.a" "libbase64_neon64.a"; do
+     grep -vF "$output_file" $XCODE_PROJECT_PATH > temp && mv temp $XCODE_PROJECT_PATH
+   done
+   # Compile the Framework Xcode project for arm64 simulator
+@@ -175,11 +202,11 @@ build_framework_for_x64_simulator() {
+   # Move libraries to the correct location
+   for output_file in "${outputs_x64[@]}"; do
+     rm -f $TARGET_LIBRARY_PATH/$output_file
+-    mv $TARGET_LIBRARY_PATH/x64-simulator/$output_file $TARGET_LIBRARY_PATH/$output_file
++    [ -f $TARGET_LIBRARY_PATH/x64-simulator/$output_file ] && mv $TARGET_LIBRARY_PATH/x64-simulator/$output_file $TARGET_LIBRARY_PATH/$output_file
+   done
+   # Remove libraries that do not exist for this target
+   cp $XCODE_PROJECT_PATH $XCODE_PROJECT_PATH.bak
+-  for output_file in "${outputs_arm64_only[@]}"; do
++  for output_file in "${outputs_arm64_only[@]}" "libbase64.a" "libbase64_neon64.a"; do
+     grep -vF "$output_file" $XCODE_PROJECT_PATH > temp && mv temp $XCODE_PROJECT_PATH
+   done
+   # Compile the Framework Xcode project for x64 simulator
+diff --git a/tools/v8_gypfiles/v8.gyp b/tools/v8_gypfiles/v8.gyp
+--- a/tools/v8_gypfiles/v8.gyp
++++ b/tools/v8_gypfiles/v8.gyp
+@@ -1468,6 +1468,7 @@
+         ['OS == "ios"', {
+           'sources': [
+             '<(V8_ROOT)/src/base/debug/stack_trace_posix.cc',
+             '<(V8_ROOT)/src/base/platform/platform-darwin.cc',
++            '<(V8_ROOT)/src/base/platform/platform-ios.cc',
+           ]
+         }],
+@@ -2407,3 +2407,4 @@
++        '<(ABSEIL_ROOT)/absl/crc/internal/crc_non_temporal_memcpy.cc',
+         '<(ABSEIL_ROOT)/absl/crc/internal/crc_memcpy.h',
+         '<(ABSEIL_ROOT)/absl/crc/internal/crc_memcpy_fallback.cc',
+         '<(ABSEIL_ROOT)/absl/crc/internal/crc_memcpy_x86_arm_combined.cc',

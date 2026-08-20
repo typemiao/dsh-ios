@@ -1,0 +1,190 @@
+# .github/workflows/ci.yml — build DSH Mobile entirely on GitHub Actions
+# (no local Mac needed).
+#
+# Pipeline:
+#   1. framework : nodejs-mobile Node 22.9 xcframework, per-arch on macOS runners
+#   2. payload   : assemble the dsh runnable payload (Linux, pure JS) + desktop smoke test
+#   3. app       : combine slices -> xcodegen -> simulator run (phase 3) -> unsigned ipa
+#
+# Cost notes (private repos bill macOS minutes x10):
+#   - framework jobs ~60-120 min macOS each, app job ~20-40 min macOS,
+#     payload job is Linux (free tier). One full run ~1,000-2,000 billed minutes.
+#   - Public repos: unlimited standard-runner minutes.
+
+name: dsh-ios build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ── 1. nodejs-mobile xcframework slices (Node 22.9, jitless) ───────────────
+  framework:
+    name: framework-${{ matrix.arch }}
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, arm64-simulator]
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick Xcode (prefer 15.4 — what nodejs-mobile's own CI used)
+        run: |
+          if [ -d /Applications/Xcode_15.4.app ]; then sudo xcode-select -s /Applications/Xcode_15.4.app; fi
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          python3 --version
+          uname -m
+          df -h /
+
+      - name: Free disk space (drop unused Xcodes/toolchains, ~60GB)
+        run: |
+          sudo rm -rf /Library/Frameworks/Mono.framework \
+                      /Library/Frameworks/Xamarin.iOS.framework \
+                      /Library/Frameworks/Xamarin.Android.framework
+          sudo rm -rf ~/Library/Android /usr/local/share/powershell 2>/dev/null || true
+          KEEP="$(readlink /Applications/Xcode.app 2>/dev/null || basename /Applications/Xcode.app)"
+          for x in /Applications/Xcode_*.app; do
+            [ "$(basename "$x")" != "$KEEP" ] && sudo rm -rf "$x"
+          done
+          df -h /
+
+      - name: Build ${{ matrix.arch }} slice
+        run: ./scripts/build-nodejs-mobile.sh
+        env:
+          ARCH_ONLY: ${{ matrix.arch }}
+
+      - name: Upload ${{ matrix.arch }} framework slice
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-mobile-${{ matrix.arch }}
+          path: nodejs-mobile/out_ios_${{ matrix.arch }}
+          retention-days: 30
+
+  # ── 2. dsh runnable payload (Linux; pure JS, no native code) ───────────────
+  payload:
+    name: dsh-payload
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm 11.7.0
+        run: npm i -g pnpm@11.7.0
+
+      - name: Clone deepseek-harness (public repo, default branch master)
+        run: git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness "$HOME/deepseek-harness"
+
+      - name: Assemble dsh runnable payload
+        run: ./scripts/prepare-dsh-dist.sh "$HOME/deepseek-harness" "$RUNNER_TEMP/payload"
+
+      - name: Smoke test — boot dsh web on Linux, expect HTTP 200
+        run: |
+          DSH_HOME="$RUNNER_TEMP/dsh-home"
+          node "$RUNNER_TEMP/payload/main.js" "$DSH_HOME" "$RUNNER_TEMP/node-console.log" 3 \
+            > "$RUNNER_TEMP/boot.stdout.log" 2>&1 &
+          BOOT_PID=$!
+          ok=0
+          for i in $(seq 1 150); do
+            if curl -sf -o /dev/null http://127.0.0.1:3080/; then ok=1; break; fi
+            sleep 2
+          done
+          echo "── node-console.log tail ──"
+          tail -60 "$RUNNER_TEMP/node-console.log" 2>/dev/null || true
+          echo "── boot stdout tail ──"
+          tail -20 "$RUNNER_TEMP/boot.stdout.log" 2>/dev/null || true
+          kill "$BOOT_PID" 2>/dev/null || true
+          [ "$ok" = 1 ] || { echo "SMOKE FAILED: dsh web did not answer"; exit 1; }
+          echo "SMOKE OK: dsh web answered on 127.0.0.1:3080"
+
+      - name: Package payload
+        run: |
+          mkdir -p dist
+          tar -czf dist/dsh-dist.tar.gz -C "$RUNNER_TEMP/payload" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-dist
+          path: dist/dsh-dist.tar.gz
+          retention-days: 30
+
+  # ── 3. simulator phase-3 run + unsigned ipa ────────────────────────────────
+  app:
+    name: app-simulator-ipa
+    runs-on: macos-14
+    needs: [framework, payload]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download framework slices
+        uses: actions/download-artifact@v4
+        with:
+          name: node-mobile-arm64
+          path: out_ios_arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-mobile-arm64-simulator
+          path: out_ios_arm64-simulator
+
+      - name: Combine into NodeMobile.xcframework
+        run: |
+          xcodebuild -create-xcframework \
+            -framework out_ios_arm64/iphoneos-arm64/Release-iphoneos/NodeMobile.framework \
+            -framework out_ios_arm64-simulator/iphonesimulator-arm64/Release-iphonesimulator/NodeMobile.framework \
+            -output deps/NodeMobile.xcframework
+          find deps/NodeMobile.xcframework -maxdepth 2 -type d | sort
+
+      - name: Restore dsh payload into the app bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: dsh-dist
+          path: dist
+      - run: |
+          mkdir -p ios-app/nodejs-project
+          tar -xzf dist/dsh-dist.tar.gz -C ios-app/nodejs-project
+          du -sh ios-app/nodejs-project
+
+      - name: Install xcodegen and generate the Xcode project
+        run: |
+          brew install xcodegen
+          (cd ios-app && xcodegen generate)
+
+      - name: Build app, install, launch (phase 3) in the simulator
+        run: |
+          DEVICE="$(xcrun simctl list devices available \
+            | grep -E '^[[:space:]]+iPhone' | head -1 \
+            | sed -E 's/^[[:space:]]+//; s/ \(.*$//')"
+          echo "using simulator device: $DEVICE"
+          ./scripts/run-simulator.sh 3 "$DEVICE"
+
+      - name: Archive unsigned IPA (device slice)
+        run: |
+          xcodebuild -project ios-app/DSHMobile.xcodeproj \
+            -scheme DSHMobile -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/DSHMobile.xcarchive \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            archive
+          xcodebuild -exportArchive -archivePath build/DSHMobile.xcarchive \
+            -exportPath build/ipa -exportOptionsPlist ios-app/ExportOptions.plist
+          ls -la build/ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSHMobile-unsigned-ipa
+          path: build/ipa/DSHMobile.ipa
+          retention-days: 30

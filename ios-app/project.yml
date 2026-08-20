@@ -1,0 +1,40 @@
+# DSHMobile — thin native iOS shell for DeepSeek Harness web service.
+# Generated with XcodeGen (https://github.com/yonaskolb/XcodeGen)
+#   brew install xcodegen && xcodegen generate
+name: DSHMobile
+options:
+  bundleIdPrefix: com.dsh.ios
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    ENABLE_BITCODE: NO
+    CODE_SIGN_STYLE: Automatic
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 0.1.0
+targets:
+  DSHMobile:
+    type: application
+    platform: iOS
+    sources:
+      - path: DSHMobile
+      - path: nodejs-project
+        type: folder
+        buildPhase: resources
+    resources: []
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dsh.ios.DSHMobile
+        INFOPLIST_FILE: DSHMobile/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+    dependencies:
+      - framework: ../deps/NodeMobile.xcframework
+        embed: true
+    scheme:
+      testTargets: []
