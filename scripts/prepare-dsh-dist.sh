@@ -149,6 +149,11 @@ while queue:
 for name in sorted(referenced):
     short = name.split('/')[1]
     dst = os.path.join(peer_area, short)
+    if os.path.islink(dst) and not os.path.exists(dst):
+        # dangling store symlink (deploy pointed it at a location that does not
+        # survive the payload copy) — replace it with a real copy
+        print("replace dangling link:", name)
+        os.unlink(dst)
     if os.path.exists(dst) or os.path.islink(dst):
         continue
     src = name2dir.get(name)
