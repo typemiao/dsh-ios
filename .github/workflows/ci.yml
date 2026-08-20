@@ -46,12 +46,15 @@ jobs:
           uname -m
           df -h /
 
-      - name: Free disk space (drop unused Xcodes/toolchains, ~60GB)
+      - name: Free disk space (drop unused Xcodes/toolchains, ~60GB+)
         run: |
           sudo rm -rf /Library/Frameworks/Mono.framework \
                       /Library/Frameworks/Xamarin.iOS.framework \
                       /Library/Frameworks/Xamarin.Android.framework
           sudo rm -rf ~/Library/Android /usr/local/share/powershell 2>/dev/null || true
+          sudo rm -rf ~/Library/Caches /Users/runner/.gradle /Users/runner/.m2 \
+                      /Users/runner/.npm /Users/runner/.rustup /Users/runner/.cargo \
+                      /opt/hostedtoolcache 2>/dev/null || true
           # Xcode.app is a symlink whose target may be an ABSOLUTE path — always
           # basename it so the keep-compare matches, or the active Xcode gets
           # deleted along with the unused versions.
@@ -109,6 +112,12 @@ jobs:
 
       - name: Smoke test — boot dsh web on Linux, expect HTTP 200
         run: |
+          echo "=== cosmokit diagnostics ==="
+          ls -la "$RUNNER_TEMP/payload/node_modules/.pnpm/node_modules/@deepseek-ai/" | grep -i cosmokit || echo "NO cosmokit in peer area"
+          ls -la "$RUNNER_TEMP/payload/node_modules/@deepseek-ai/" | grep -i cosmokit || echo "NO cosmokit at top level"
+          CORDIS_STORE="$(find "$RUNNER_TEMP/payload/node_modules/.pnpm" -maxdepth 1 -type d -name '@deepseek-ai+cordis@*' | head -1)"
+          echo "cordis store: $CORDIS_STORE"
+          ls -la "$CORDIS_STORE/node_modules/@deepseek-ai/" 2>/dev/null | head -8 || echo "no store @deepseek-ai dir"
           DSH_HOME="$RUNNER_TEMP/dsh-home"
           node "$RUNNER_TEMP/payload/main.js" "$DSH_HOME" "$RUNNER_TEMP/node-console.log" 3 \
             > "$RUNNER_TEMP/boot.stdout.log" 2>&1 &
