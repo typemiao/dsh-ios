@@ -149,12 +149,14 @@ while queue:
 for name in sorted(referenced):
     short = name.split('/')[1]
     dst = os.path.join(peer_area, short)
-    if os.path.islink(dst) and not os.path.exists(dst):
-        # dangling store symlink (deploy pointed it at a location that does not
-        # survive the payload copy) — replace it with a real copy
-        print("replace dangling link:", name)
+    if os.path.islink(dst):
+        # deploy links peer entries into the checkout with relative targets
+        # (e.g. ../../../../../../home/runner/deepseek-harness/...). Those are
+        # valid at the stage path but DANGLE after `cp -a` moves the payload to
+        # a different depth — replace every peer-area symlink with a real copy.
+        print("replace peer symlink:", name)
         os.unlink(dst)
-    if os.path.exists(dst) or os.path.islink(dst):
+    if os.path.exists(dst):
         continue
     src = name2dir.get(name)
     if not src:
