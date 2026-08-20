@@ -111,6 +111,41 @@ for root, dirs, files in os.walk(NM):
             if dep.startswith('@deepseek-ai/'):
                 referenced.add(dep)
 
+# authority scan: pnpm's legacy deploy STRIPS workspace deps from deployed
+# manifests (e.g. vendored cordis loses @deepseek-ai/cosmokit), so the walk
+# above misses them. BFS over the SOURCE manifests starting from every
+# @deepseek-ai package present in the deployed tree, unioning their deps.
+present = set()
+for root, dirs, files in os.walk(NM):
+    if 'package.json' not in files:
+        continue
+    try:
+        p = json.load(open(os.path.join(root, 'package.json')))
+    except Exception:
+        continue
+    name = p.get('name')
+    if name and name.startswith('@deepseek-ai/'):
+        present.add(name)
+
+queue = sorted(present)
+seen = set(present)
+while queue:
+    name = queue.pop(0)
+    src = name2dir.get(name)
+    if not src:
+        continue
+    try:
+        p = json.load(open(os.path.join(src, 'package.json')))
+    except Exception:
+        continue
+    for key in ('dependencies', 'peerDependencies', 'optionalDependencies'):
+        for dep in (p.get(key) or {}):
+            if not dep.startswith('@deepseek-ai/') or dep in seen:
+                continue
+            seen.add(dep)
+            referenced.add(dep)
+            queue.append(dep)
+
 for name in sorted(referenced):
     short = name.split('/')[1]
     dst = os.path.join(peer_area, short)

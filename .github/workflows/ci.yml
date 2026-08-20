@@ -52,10 +52,16 @@ jobs:
                       /Library/Frameworks/Xamarin.iOS.framework \
                       /Library/Frameworks/Xamarin.Android.framework
           sudo rm -rf ~/Library/Android /usr/local/share/powershell 2>/dev/null || true
-          KEEP="$(readlink /Applications/Xcode.app 2>/dev/null || basename /Applications/Xcode.app)"
+          # Xcode.app is a symlink whose target may be an ABSOLUTE path — always
+          # basename it so the keep-compare matches, or the active Xcode gets
+          # deleted along with the unused versions.
+          KEEP="$(basename "$(readlink /Applications/Xcode.app 2>/dev/null || echo /Applications/Xcode.app)")"
+          echo "keeping: $KEEP"
           for x in /Applications/Xcode_*.app; do
             [ "$(basename "$x")" != "$KEEP" ] && sudo rm -rf "$x"
           done
+          ls -la /Applications/ | grep -i xcode || true
+          xcode-select -p
           df -h /
 
       - name: Build ${{ matrix.arch }} slice
