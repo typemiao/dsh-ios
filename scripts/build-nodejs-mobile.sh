@@ -19,8 +19,12 @@
 
 set -euo pipefail
 
-REPO="${1:-$(cd "$(dirname "$0")/.." && pwd)/nodejs-mobile}"
-OUT="${2:-$(cd "$(dirname "$0")/.." && pwd)/deps}"
+# Resolve the script's own directory ONCE, before any cd. Later lookups
+# (PATCH_DIR runs after `cd "$REPO"`) must not depend on the current dir.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+REPO="${1:-$SCRIPT_DIR/../nodejs-mobile}"
+OUT="${2:-$SCRIPT_DIR/../deps}"
 
 echo "==> nodejs-mobile repo: $REPO"
 echo "==> output dir:        $OUT"
@@ -29,16 +33,20 @@ echo "==> output dir:        $OUT"
 if [ ! -f "$REPO/configure" ]; then
   echo "==> cloning capawesome nodejs-mobile (branch update22-9-0) into $REPO ..."
   # GitHub can transiently fail a shallow clone ("error processing shallow
-  # info"); retry, then fall back to a full single-branch clone.
+  # info") -- sometimes even printing fatal but exiting 0 with a broken
+  # worktree -- so also verify configure exists. Retry, then fall back to a
+  # full single-branch clone (no shallow file, immune to that failure mode).
   for attempt in 1 2 3; do
-    if git clone --depth 1 --branch update22-9-0 https://github.com/capawesome-team/nodejs-mobile.git "$REPO"; then
+    echo "==> shallow clone attempt $attempt"
+    if git clone --depth 1 --branch update22-9-0 https://github.com/capawesome-team/nodejs-mobile.git "$REPO" \
+       && [ -f "$REPO/configure" ]; then
       break
     fi
-    echo "==> shallow clone attempt $attempt failed - retrying"
+    echo "==> shallow clone attempt $attempt failed or incomplete - retrying"
     rm -rf "$REPO"
     sleep 5
   done
-  if [ ! -d "$REPO/.git" ]; then
+  if [ ! -f "$REPO/configure" ]; then
     echo "==> falling back to full single-branch clone"
     git clone --single-branch --branch update22-9-0 https://github.com/capawesome-team/nodejs-mobile.git "$REPO"
   fi
@@ -60,7 +68,7 @@ cd "$REPO"
 # V8 sources (platform-ios.cc jitless stub + abseil
 # crc_non_temporal_memcpy.cc). Idempotent: on an already-patched (resumable)
 # build tree it simply doesn't apply a second time and we continue.
-PATCH_DIR="$(cd "$(dirname "$0")/.." && pwd)/patches"
+PATCH_DIR="$SCRIPT_DIR/../patches"
 if git apply --check "$PATCH_DIR/nodejs-mobile-ios.patch" 2>/dev/null; then
   git apply "$PATCH_DIR/nodejs-mobile-ios.patch"
   echo "==> applied patches/nodejs-mobile-ios.patch"

@@ -29,8 +29,12 @@
 
 set -euo pipefail
 
+# Resolve the script's own directory ONCE, before any cd, so later relative
+# lookups (TPL_DIR below runs after `cd "$STAGE"`) cannot break.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 REPO="${1:-$HOME/deepseek-harness}"
-OUT="${2:-$(cd "$(dirname "$0")/.." && pwd)/ios-app/nodejs-project}"
+OUT="${2:-$SCRIPT_DIR/../ios-app/nodejs-project}"
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/dsh-dist.XXXXXX")"
 
 echo "==> dsh repo : $REPO"
@@ -218,7 +222,7 @@ SHARP
 fi
 
 # -- 4. copy into the app (symlinks preserved) ------------------------------
-TPL_DIR="$(cd "$(dirname "$0")/.." && pwd)/ios-app/nodejs-project"
+TPL_DIR="$SCRIPT_DIR/../ios-app/nodejs-project"
 cp "$TPL_DIR/main.js" "$TPL_DIR/boot-web.js" "$STAGE/"
 cd /
 echo "==> copying to $OUT"
