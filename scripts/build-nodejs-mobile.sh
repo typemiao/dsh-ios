@@ -5,9 +5,9 @@
 # (https://github.com/capawesome-team/nodejs-mobile, branch update22-9-0).
 #
 # Why from source: dsh requires Node ^22.19 || >=24 (packages/dsh root engines),
-# and every published nodejs-mobile release is Node 12/16/18 — too old. The
+# and every published nodejs-mobile release is Node 12/16/18 -- too old. The
 # capawesome fork carries a Node 22.9 branch whose CI builds iOS with Xcode 15;
-# we reproduce that build locally (M4 → arm64 only, so x64-simulator is skipped;
+# we reproduce that build locally (M4 -> arm64 only, so x64-simulator is skipped;
 # that slice would need Rosetta and is never used on Apple Silicon simulators).
 #
 # JIT: the iOS build passes --v8-options=--jitless (default in nodejs-mobile),
@@ -25,9 +25,9 @@ OUT="${2:-$(cd "$(dirname "$0")/.." && pwd)/deps}"
 echo "==> nodejs-mobile repo: $REPO"
 echo "==> output dir:        $OUT"
 
-# Clone BEFORE cd — on a fresh checkout nodejs-mobile/ does not exist yet.
+# Clone BEFORE cd -- on a fresh checkout nodejs-mobile/ does not exist yet.
 if [ ! -f "$REPO/configure" ]; then
-  echo "==> cloning capawesome nodejs-mobile (branch update22-9-0) into $REPO…"
+  echo "==> cloning capawesome nodejs-mobile (branch update22-9-0) into $REPO ..."
   git clone --depth 1 --branch update22-9-0 https://github.com/capawesome-team/nodejs-mobile.git "$REPO"
   # Pin the exact commit the patches/ were built against (update22-9-0 tip at
   # handover). If upstream moves the branch, deepen the history and check out
@@ -39,9 +39,9 @@ if [ ! -f "$REPO/configure" ]; then
 fi
 cd "$REPO"
 
-# ── apply the iOS build patches ─────────────────────────────────────────────
+# -- apply the iOS build patches ---------------------------------------------
 # The update22-9-0 branch does not build for iOS as-is (its tip commit is
-# literally "Try adding ios…"). patches/nodejs-mobile-ios.patch carries the
+# literally "Try adding ios..."). patches/nodejs-mobile-ios.patch carries the
 # full diff fixing: the host-tool iOS-SDK leak, the 7 missing Node 22 static
 # libs in the framework project, the libbase64 removal, and the two missing
 # V8 sources (platform-ios.cc jitless stub + abseil
@@ -52,7 +52,7 @@ if git apply --check "$PATCH_DIR/nodejs-mobile-ios.patch" 2>/dev/null; then
   git apply "$PATCH_DIR/nodejs-mobile-ios.patch"
   echo "==> applied patches/nodejs-mobile-ios.patch"
 else
-  echo "==> patches already applied (or upstream drifted) — verify: git diff --stat"
+  echo "==> patches already applied (or upstream drifted) -- verify: git diff --stat"
 fi
 
 # Refresh the reference .patched copies so they mirror the live tree.
@@ -67,7 +67,7 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 # Actions runners ship 3.12/3.13). Fall back to a throwaway venv with
 # setuptools (it installs a distutils shim), like nodejs-mobile's own CI.
 if ! python3 -c 'import distutils' >/dev/null 2>&1; then
-  echo "==> python3 lacks distutils — creating venv with setuptools"
+  echo "==> python3 lacks distutils -- creating venv with setuptools"
   python3 -m venv .ci-venv
   # shellcheck disable=SC1091
   . .ci-venv/bin/activate

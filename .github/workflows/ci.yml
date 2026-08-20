@@ -85,16 +85,18 @@ jobs:
       - name: Install pnpm 11.7.0
         run: npm i -g pnpm@11.7.0
 
-      - name: Clone deepseek-harness (public repo, pinned to the commit the iOS build was validated against)
+      - name: Clone deepseek-harness (public repo, pinned to the last 0.1.0-rc.5 commit)
         run: |
           git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness "$HOME/deepseek-harness"
-          # 99151657c0 = master as of 2026-08-15, the exact state the Mac
-          # session used (boot-web.js APIs + pnpm deploy behavior). master has
-          # drifted since; do not follow it. (Fetch by --shallow-since: GitHub
-          # refuses fetching an unadvertised SHA from a shallow clone.)
+          # fdab3aad = the last master commit carrying 0.1.0-rc.5 (parent of the
+          # rc.6 release bump). The Mac session built the iOS payload against the
+          # rc.5 era: boot-web.js APIs + pnpm 11.7.0 deploy behavior. master has
+          # since moved to rc.8; do not follow it. (Fetch by --shallow-since:
+          # GitHub refuses fetching an unadvertised SHA from a shallow clone.)
           git -C "$HOME/deepseek-harness" fetch --shallow-since=2026-08-01 origin master
-          git -C "$HOME/deepseek-harness" checkout -q 99151657c0
+          git -C "$HOME/deepseek-harness" checkout -q fdab3aadb3d5015e263cc1578fb4366bc2ce0f0f
           git -C "$HOME/deepseek-harness" log -1 --oneline
+          git -C "$HOME/deepseek-harness" show HEAD:package.json | grep '"version"'
 
       - name: Assemble dsh runnable payload
         run: ./scripts/prepare-dsh-dist.sh "$HOME/deepseek-harness" "$RUNNER_TEMP/payload"

@@ -1,9 +1,9 @@
 #!/bin/bash
-# prepare-dsh-dist.sh — assemble the dsh runnable payload for iOS.
+# prepare-dsh-dist.sh -- assemble the dsh runnable payload for iOS.
 #
 #  1. In the dsh repo: pnpm install + pnpm run build (lib/ for every package,
 #     dist/ for the web frontend). All dependency installation and building
-#     happens HERE on the Mac — nothing ever installs on the device.
+#     happens HERE on the Mac -- nothing ever installs on the device.
 #  2. pnpm deploy --prod pulls a self-contained node_modules for the dsh CLI
 #     package. Workspace packages are physically INJECTED (no links back into
 #     the checkout), so the payload is self-contained; internal store links are
@@ -11,15 +11,15 @@
 #  3. Layout repairs (all validated by the desktop smoke test):
 #     a. peer-only workspace packages that pnpm deploy drops are copied into
 #        the .pnpm/node_modules/@deepseek-ai peer area (cordis-plugin-group,
-#        dsh-fs, dsh-sandbox, dsh-shell, ... — 19 packages).
+#        dsh-fs, dsh-sandbox, dsh-shell, ... -- 19 packages).
 #     b. the top-level node_modules/@deepseek-ai is rebuilt with one link per
-#        @deepseek-ai package, mirroring a pnpm workspace root — required for
+#        @deepseek-ai package, mirroring a pnpm workspace root -- required for
 #        healProfilesModuleFallback's closure walk (createRequire.resolve.paths
 #        does not realpath symlinks).
 #     c. native addons that cannot exist on iOS are replaced by pure-JS stubs:
 #        node-addon-require-builtin (shim), node-pty (used by dsh-subprocess-local),
 #        sharp (used by dsh-attachment-local). All three are only called lazily.
-#  4. The tree is copied with symlinks preserved (cp -a) — the standard layout
+#  4. The tree is copied with symlinks preserved (cp -a) -- the standard layout
 #     nodejs-mobile apps ship (Xcode folder references preserve symlinks).
 #
 # Usage:
@@ -40,7 +40,18 @@ echo "==> out dir  : $OUT"
 
 cd "$REPO"
 
-# ── 1. install + build (Mac only) ──────────────────────────────────────────
+# -- 0. pnpm 11 deploy compatibility -----------------------------------------
+# pnpm >=11 ships a new deploy engine that fails on this workspace
+# ("Deployment with a shared lockfile has failed") unless the legacy deploy
+# path is forced. Add the flag if the workspace does not set it yet. (The Mac
+# session's pnpm 11.7.0 used the legacy path, so this preserves that behavior.)
+WS_YAML="$REPO/pnpm-workspace.yaml"
+if [ -f "$WS_YAML" ] && ! grep -q '^forceLegacyDeploy:' "$WS_YAML"; then
+  printf 'forceLegacyDeploy: true\n' >> "$WS_YAML"
+  echo "==> added forceLegacyDeploy: true to pnpm-workspace.yaml"
+fi
+
+# -- 1. install + build (Mac only) ------------------------------------------
 if [ ! -d node_modules ]; then
   echo "==> pnpm install"
   pnpm install --frozen-lockfile
@@ -48,10 +59,10 @@ fi
 echo "==> pnpm run build (lib/ for all packages, dist/ for the web frontend)"
 pnpm run build
 
-# ── 2. self-contained production node_modules ──────────────────────────────
+# -- 2. self-contained production node_modules ------------------------------
 # --config.inject-workspace-packages=true makes pnpm physically copy the
 # workspace packages into the deploy instead of leaving links to the checkout.
-echo "==> pnpm deploy --prod @deepseek-ai/dsh → $STAGE"
+echo "==> pnpm deploy --prod @deepseek-ai/dsh -> $STAGE"
 rm -rf "$STAGE"
 pnpm --filter @deepseek-ai/dsh deploy --prod --config.inject-workspace-packages=true "$STAGE"
 
@@ -67,7 +78,7 @@ done
 find "$STAGE" -name index.html -path "*dsh-web-frontend*" | grep -q . \
   || { echo "web frontend dist missing" >&2; exit 1; }
 
-# ── 3. layout repairs ──────────────────────────────────────────────────────
+# -- 3. layout repairs ------------------------------------------------------
 cd "$STAGE"
 export DSH_REPO="$REPO"
 python3 - <<'PYEOF'
@@ -76,7 +87,7 @@ import os, glob, json, shutil, subprocess
 REPO = os.environ['DSH_REPO']
 NM = 'node_modules'
 
-# 3a. peer-only workspace packages dropped by deploy → copy into the peer area
+# 3a. peer-only workspace packages dropped by deploy -> copy into the peer area
 peer_area = os.path.join(NM, '.pnpm', 'node_modules', '@deepseek-ai')
 name2dir = {}
 for pj in glob.glob(os.path.join(REPO, 'packages/*/*/package.json')) + \
@@ -202,7 +213,7 @@ module.exports.default = sharp
 SHARP
 fi
 
-# ── 4. copy into the app (symlinks preserved) ──────────────────────────────
+# -- 4. copy into the app (symlinks preserved) ------------------------------
 TPL_DIR="$(cd "$(dirname "$0")/.." && pwd)/ios-app/nodejs-project"
 cp "$TPL_DIR/main.js" "$TPL_DIR/boot-web.js" "$STAGE/"
 cd /

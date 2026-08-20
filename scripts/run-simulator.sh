@@ -1,5 +1,5 @@
 #!/bin/bash
-# run-simulator.sh — build the iOS app for the simulator, install, launch,
+# run-simulator.sh -- build the iOS app for the simulator, install, launch,
 # and stream the mirrored node console log (phase acceptance loop).
 #
 # Usage:
@@ -53,7 +53,7 @@ for i in $(seq 1 240); do
   fi
   sleep 1
 done
-echo "── node console ──"
+echo "-- node console --"
 tail -50 "$LOG" 2>/dev/null || echo "(no log yet)"
 
 # 5. gate on the phase's success marker (CI needs a hard pass/fail)
