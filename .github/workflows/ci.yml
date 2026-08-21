@@ -46,7 +46,7 @@ jobs:
           uname -m
           df -h /
 
-      - name: Free disk space (drop unused Xcodes/toolchains, ~60GB+)
+      - name: Free disk space (drop unused Xcodes/toolchains/simulators, ~90GB+)
         run: |
           sudo rm -rf /Library/Frameworks/Mono.framework \
                       /Library/Frameworks/Xamarin.iOS.framework \
@@ -55,6 +55,13 @@ jobs:
           sudo rm -rf ~/Library/Caches /Users/runner/.gradle /Users/runner/.m2 \
                       /Users/runner/.npm /Users/runner/.rustup /Users/runner/.cargo \
                       /opt/hostedtoolcache 2>/dev/null || true
+          # Simulator runtimes (10-30GB) are not needed to COMPILE for the
+          # device/simulator SDK — delete them here (the app job boots its own
+          # simulator on a fresh runner).
+          sudo rm -rf /Library/Developer/CoreSimulator \
+                      /Users/runner/Library/Developer/CoreSimulator \
+                      /Library/Developer/DeviceSupport \
+                      /Users/runner/Library/Developer/Xcode/iOS\ DeviceSupport 2>/dev/null || true
           # Xcode.app is a symlink whose target may be an ABSOLUTE path — always
           # basename it so the keep-compare matches, or the active Xcode gets
           # deleted along with the unused versions.
