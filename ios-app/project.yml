@@ -4,6 +4,10 @@
 name: DSHMobile
 options:
   bundleIdPrefix: com.dsh.ios
+  # Pin the generated project format so the runner's Xcode (15.4 / 16.x) can
+  # open it — the latest xcodegen defaults to objectVersion 77 (Xcode 26),
+  # which older Xcode versions refuse.
+  xcodeVersion: "15.0"
   deploymentTarget:
     iOS: "15.0"
   createIntermediateGroups: true

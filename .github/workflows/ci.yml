@@ -190,6 +190,11 @@ jobs:
           tar -xzf dist/dsh-dist.tar.gz -C ios-app/nodejs-project
           du -sh ios-app/nodejs-project
 
+      - name: Pick Xcode (same as the framework jobs — prefer 15.4)
+        run: |
+          if [ -d /Applications/Xcode_15.4.app ]; then sudo xcode-select -s /Applications/Xcode_15.4.app; fi
+          xcodebuild -version
+
       - name: Install xcodegen and generate the Xcode project
         run: |
           brew install xcodegen
