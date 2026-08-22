@@ -199,6 +199,14 @@ jobs:
         run: |
           brew install xcodegen
           (cd ios-app && xcodegen generate)
+          # xcodegen 2.45.4 writes objectVersion 77 (Xcode 26), which the
+          # runner's Xcode 15.4 refuses to open. Force the Xcode-15 format (56)
+          # after generation.
+          sed -i '' -E 's/objectVersion = [0-9]+;/objectVersion = 56;/' \
+            ios-app/DSHMobile.xcodeproj/project.pbxproj
+          sed -i '' '/preferredProjectObjectVersion/d' \
+            ios-app/DSHMobile.xcodeproj/project.pbxproj
+          grep -n 'objectVersion' ios-app/DSHMobile.xcodeproj/project.pbxproj | head -2
 
       - name: Build app, install, launch (phase 3) in the simulator
         run: |
