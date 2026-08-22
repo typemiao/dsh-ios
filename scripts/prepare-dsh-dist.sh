@@ -195,6 +195,31 @@ for entry in os.listdir(top):
 for name, target in real.items():
     os.symlink(os.path.relpath(target, top), os.path.join(top, name.split('/')[1]))
 print("top-level @deepseek-ai links:", len(real))
+
+# 3c. dereference symlinks that ESCAPE the payload. pnpm links workspace deps
+# (schemastery, cosmokit, ...) into the store with absolute/relative chains
+# into the checkout. They are valid while the checkout exists (the Linux smoke
+# test), but iOS installd rejects them when they are inside the app bundle.
+# Replace every symlink whose resolved target leaves the payload with a real
+# copy of its target.
+stage_real = os.path.realpath('.')
+deref = 0
+for root, dirs, files in os.walk('.'):
+    for name in list(dirs) + list(files):
+        p = os.path.join(root, name)
+        if not os.path.islink(p):
+            continue
+        target = os.path.realpath(p)
+        if target.startswith(stage_real):
+            continue
+        print("deref escapee:", p)
+        os.unlink(p)
+        if os.path.isdir(target):
+            shutil.copytree(target, p, symlinks=True)
+        elif os.path.isfile(target):
+            shutil.copy2(target, p)
+        deref += 1
+print("deref escapee links:", deref)
 PYEOF
 
 # sanity (post-repair): the bundle/profile packages and the web UI must be present
