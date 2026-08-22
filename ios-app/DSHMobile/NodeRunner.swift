@@ -54,10 +54,13 @@ final class NodeRunner {
             guard let self else { return }
             var argv: [UnsafeMutablePointer<CChar>?] = [
                 strdup("node"),
-                // Expose Node internals so the vendored cordis loader can reach
-                // internal/modules/esm/loader through the plain require path
-                // (the node-addon-require-builtin shim cannot on its own).
-                strdup("--expose-internals"),
+                // NOTE: do NOT pass --expose-internals here. With it, the cordis
+                // loader switches to the direct require('internal/modules/esm/loader')
+                // path, which fails on nodejs-mobile (Node 22.9 + jitless) with
+                // "loader entries failed to apply". The pure-JS
+                // node-addon-require-builtin shim (process.getBuiltinModule)
+                // reaches the internal loader and boots the tree — the exact path
+                // the Linux smoke test validates. Keep argv = [node, main.js, ...].
                 strdup(mainScript.path),
                 strdup(Self.dshHome()),
                 strdup(Self.nodeConsoleLogPath()),
