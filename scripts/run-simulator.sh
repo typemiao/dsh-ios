@@ -20,6 +20,12 @@ echo "==> phase: $PHASE  device: $DEVICE"
 
 # 1. regenerate the Xcode project (keeps project.yml as the source of truth)
 (cd "$APP" && xcodegen generate)
+# xcodegen >=2.45 writes objectVersion 77 (Xcode 26), which the runner's
+# Xcode 15.4 refuses to open — force the Xcode-15 format.
+sed -i '' -E 's/objectVersion = [0-9]+;/objectVersion = 56;/' \
+  "$APP/DSHMobile.xcodeproj/project.pbxproj"
+sed -i '' '/preferredProjectObjectVersion/d' \
+  "$APP/DSHMobile.xcodeproj/project.pbxproj"
 
 # 2. build for the simulator (arm64 slice from NodeMobile.xcframework)
 xcodebuild -project "$APP/DSHMobile.xcodeproj" \
