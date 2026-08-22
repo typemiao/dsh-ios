@@ -6,7 +6,7 @@
 // profile's own cordis.patch.yml, and an iOS overlay that disables rows whose
 // native dependencies cannot exist on iOS (node-pty, sharp, worker threads).
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
@@ -57,40 +57,55 @@ export async function bootWeb(dshHome) {
 
   // 2. Load (auto-init) the web profile: bundles @deepseek-ai/dsh-base +
   //    @deepseek-ai/dsh-web-app, plus the profile's own cordis.patch.yml.
-  const profile = loadProfile(BIN_NAME, PROFILE, installAnchor)
-  console.log('boot-web: profile dir =', profile.dir)
-  console.log('boot-web: bundles =', profile.layers.map((l) => l.packageName))
+  const bootProfile = async (profile) => {
+    console.log('boot-web: profile dir =', profile.dir)
+    console.log('boot-web: bundles =', profile.layers.map((l) => l.packageName))
 
-  // 3. The loader needs a real include root to anchor baseUrl: an empty entry
-  //    list file inside the profile directory (same contract as the CLI).
-  const rootConfig = join(profile.dir, 'cordis.yml')
-  writeFileSync(rootConfig, '# dsh profile root — an empty entry list.\n[]\n')
+    // 3. The loader needs a real include root to anchor baseUrl: an empty entry
+    //    list file inside the profile directory (same contract as the CLI).
+    const rootConfig = join(profile.dir, 'cordis.yml')
+    writeFileSync(rootConfig, '# dsh profile root — an empty entry list.\n[]\n')
 
-  // 4. Patch stack in application order: bundle layers, the profile user layer,
-  //    then the iOS overlay (which outranks both).
-  const patches = [
-    ...profile.layers.flatMap((layer) => layer.patches),
-    ...profile.patches,
-    ...IOS_OVERLAY,
-  ]
-  console.log('boot-web: patch layers =', patches.length)
+    // 4. Patch stack in application order: bundle layers, the profile user layer,
+    //    then the iOS overlay (which outranks both).
+    const patches = [
+      ...profile.layers.flatMap((layer) => layer.patches),
+      ...profile.patches,
+      ...IOS_OVERLAY,
+    ]
+    console.log('boot-web: patch layers =', patches.length)
 
-  // 5. Boot the tree. The host context provides the launch environment snapshot
-  //    and the web app's command line (--host/--port), consumed by the
-  //    web-startup provider (dsh-web-app/startup) and the webserver row.
-  const portArg = process.env.DSH_IOS_PORT ?? '3080'
-  const ctx = await boot(BIN_NAME, rootConfig, patches, (hostCtx) => {
-    hostCtx.provide(
-      DSH_LAUNCH_ENVIRONMENT_KEY,
-      createLaunchEnvironmentSnapshot([{ source: 'process', values: process.env }]),
-    )
-    provideCmdline(hostCtx, {
-      args: ['--host', '127.0.0.1', '--port', portArg],
-      exit: (code) => {
-        console.log('boot-web: dsh requested exit', code)
-      },
+    // 5. Boot the tree. The host context provides the launch environment snapshot
+    //    and the web app's command line (--host/--port), consumed by the
+    //    web-startup provider (dsh-web-app/startup) and the webserver row.
+    const portArg = process.env.DSH_IOS_PORT ?? '3080'
+    return boot(BIN_NAME, rootConfig, patches, (hostCtx) => {
+      hostCtx.provide(
+        DSH_LAUNCH_ENVIRONMENT_KEY,
+        createLaunchEnvironmentSnapshot([{ source: 'process', values: process.env }]),
+      )
+      provideCmdline(hostCtx, {
+        args: ['--host', '127.0.0.1', '--port', portArg],
+        exit: (code) => {
+          console.log('boot-web: dsh requested exit', code)
+        },
+      })
     })
-  })
+  }
+
+  let profile = loadProfile(BIN_NAME, PROFILE, installAnchor)
+  let ctx
+  try {
+    ctx = await bootProfile(profile)
+  } catch (err) {
+    // Recovery path for persisted incompatible profile rows in reused simulator
+    // homes: reset the profile directory and retry once from a fresh baseline.
+    if (!String(err).includes('loader entries failed to apply')) throw err
+    console.warn('boot-web: include loader failed; resetting profile dir and retrying once')
+    rmSync(profile.dir, { recursive: true, force: true })
+    profile = loadProfile(BIN_NAME, PROFILE, installAnchor)
+    ctx = await bootProfile(profile)
+  }
 
   const webServer = ctx.get('webServer')
   const port = webServer?.port ?? 'unknown'
