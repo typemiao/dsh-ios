@@ -289,10 +289,15 @@ PTY
 PTY
 fi
 
+# sharp: rewrite package.json main/exports to a pure-JS stub. The shipped
+# sharp has main->./dist/index.cjs and exports->./dist/index.mjs: writing a
+# bare index.js (the old approach) never redirected the loader. Rewriting the
+# package.json so both import and require hit the stub makes `import sharp
+# from 'sharp'` (attachment-local/image.ts) resolve without touching libvips.
 SHARP=$(find "$STAGE/node_modules/.pnpm" -maxdepth 1 -type d -name 'sharp@*' | head -1)
 if [ -n "$SHARP" ]; then
   SHARP="$SHARP/node_modules/sharp"
-  cat > "$SHARP/index.js" <<'SHARP'
+  cat > "$SHARP/ios-shim.cjs" <<'SHARP'
 // Pure-JS iOS shim for sharp (native addon unavailable on iOS).
 'use strict'
 function sharp() {
@@ -301,10 +306,179 @@ function sharp() {
 sharp.format = {}
 sharp.versions = {}
 sharp.available = {}
+sharp.cache = () => sharp
 module.exports = sharp
 module.exports.default = sharp
 SHARP
+  cat > "$SHARP/ios-shim.mjs" <<'SHARP'
+// Pure-JS iOS shim for sharp (native addon unavailable on iOS).
+function sharp() {
+  throw new Error('sharp is not available on iOS (native addon)')
+}
+sharp.format = {}
+sharp.versions = {}
+sharp.available = {}
+sharp.cache = () => sharp
+export default sharp
+export const format = {}
+export const versions = {}
+export const available = {}
+SHARP
+  python3 - "$SHARP/package.json" <<'PYJSON'
+import json, sys
+p = sys.argv[1]
+j = json.load(open(p, encoding='utf-8'))
+j['main'] = './ios-shim.cjs'
+j['module'] = './ios-shim.mjs'
+j['exports'] = {
+  '.': {
+    'import': { 'types': './ios-shim.mjs', 'default': './ios-shim.mjs' },
+    'require': { 'types': './ios-shim.cjs', 'default': './ios-shim.cjs' },
+  },
+}
+json.dump(j, open(p, 'w', encoding='utf-8'), indent=2)
+PYJSON
+  echo "==> sharp stubbed (package.json exports -> ios-shim)"
 fi
+
+# koffi: native FFI module (used by dsh-sandbox-windows-acl). sandbox-local
+# imports @deepseek-ai/dsh-sandbox-windows-acl, whose ffi.js runs
+# koffi.pointer()/koffi.struct() at module top-level. On iOS the win32 ACL
+# runner is never invoked, so the stub only needs to satisfy import-time
+# descriptor calls (pointer/struct) and throw for runtime FFI (load/call).
+# Rewrite koffi's package.json exports to a pure-JS stub.
+KOFFI=$(find "$STAGE/node_modules/.pnpm" -maxdepth 1 -type d -name 'koffi@*' | head -1)
+if [ -n "$KOFFI" ]; then
+  KOFFI="$KOFFI/node_modules/koffi"
+  cat > "$KOFFI/ios-shim.js" <<'KOFFI'
+// Pure-JS iOS shim for koffi (native FFI addon unavailable on iOS).
+'use strict'
+// Inert descriptor objects for the import-time calls made by
+// dsh-sandbox-windows-acl/src/ffi.ts. Real FFI (load/call/decode/encode) is
+// never reached on iOS (the win32 runner is not selected), so those throw.
+class Ptr {
+  constructor(type) { this.type = type }
+}
+class Struct {
+  constructor(name, fields) { this.name = name; this.fields = fields }
+  get size() { return 8 }
+  pointer() { return new Ptr(this) }
+}
+function _pointer(type) { return new Ptr(type) }
+function _struct(name, fields) { return new Struct(name ?? 'anon', fields ?? {}) }
+function die() { throw new Error('koffi is not available on iOS (native FFI addon)') }
+const koffi = {
+  pointer: _pointer,
+  struct: _struct,
+  load: die,
+  call: die,
+  decode: die,
+  encode: die,
+  alloc: die,
+  address: die,
+  proto: die,
+  register: die,
+  unregister: die,
+  sizeof: () => 8,
+  view: die,
+  free: die,
+}
+export default koffi
+export const pointer = koffi.pointer
+export const struct = koffi.struct
+export const load = koffi.load
+export const call = koffi.call
+export const decode = koffi.decode
+export const encode = koffi.encode
+export const alloc = koffi.alloc
+export const address = koffi.address
+export const proto = koffi.proto
+export const register = koffi.register
+export const unregister = koffi.unregister
+export const sizeof = koffi.sizeof
+export const view = koffi.view
+export const free = koffi.free
+KOFFI
+  python3 - "$KOFFI/package.json" <<'PYJSON'
+import json, sys
+p = sys.argv[1]
+j = json.load(open(p, encoding='utf-8'))
+j['main'] = './ios-shim.js'
+j['exports'] = { '.': { 'types': './ios-shim.js', 'default': './ios-shim.js' } }
+json.dump(j, open(p, 'w', encoding='utf-8'), indent=2)
+PYJSON
+  echo "==> koffi stubbed (package.json exports -> ios-shim)"
+fi
+
+# zstd: Node 22.9 (nodejs-mobile) builds node:zlib WITHOUT the zstd family
+# (zstdCompress/zstdDecompress/createZstdDecompress/... were added later).
+# session-persistence-jsonl's bundled lib/index.js imports them at top level,
+# which throws at import time -> the whole cordis include apply fails. Make
+# the zlib access lazy so the module imports cleanly and only the zstd path
+# (never taken on iOS, where compression is 'none') resolves zlib.
+python3 - "$STAGE" <<'PYZSTD'
+import os, sys, re
+stage = sys.argv[1]
+# The compiled backend bundles zstd and imports zlib at top level. Patch the
+# deployed lib/index.js of session-persistence-jsonl.
+target = os.path.join(stage, 'node_modules', '.pnpm')
+cb = '@deepseek-ai+dsh-session-persistence-jsonl@'
+found = False
+for root, dirs, files in os.walk(target):
+    if cb not in root:
+        continue
+    idx = os.path.join(root, 'node_modules', '@deepseek-ai', 'dsh-session-persistence-jsonl', 'lib', 'index.js')
+    if not os.path.exists(idx):
+        continue
+    s = open(idx, encoding='utf-8').read()
+    # Replace the top-level named zlib zstd import with a lazily-resolved holder.
+    #
+    # Original (bundled):
+    #   import { constants, createZstdDecompress, zstdCompress, zstdDecompress, zstdDecompressSync } from "node:zlib";
+    # The loader evaluates ESM top-level imports eagerly, so a missing named
+    # export from a builtin fails immediately. Replace with a guarded getter.
+    pat = re.compile(
+        r'import\s*\{\s*constants\s*,\s*createZstdDecompress\s*,\s*zstdCompress\s*,\s*zstdDecompress\s*,\s*zstdDecompressSync\s*\}\s*from\s*["\']node:zlib["\'];',
+        re.S,
+    )
+    repl = (
+        '// iOS shim: node:zlib on Node 22.9 has no zstd family; resolve lazily.\n'
+        'const __zlib = (() => { try { return process.getBuiltinModule?.("node:zlib") ?? null } catch { return null } })();\n'
+        'const constants = __zlib?.constants ?? {};\n'
+        'const createZstdDecompress = __zlib?.createZstdDecompress;\n'
+        'const zstdCompress = __zlib?.zstdCompress;\n'
+        'const zstdDecompress = __zlib?.zstdDecompress;\n'
+        'const zstdDecompressSync = __zlib?.zstdDecompressSync;\n'
+    )
+    new_s, n = pat.subn(repl, s, count=1)
+    if n == 1:
+        s = new_s
+    # Guard the top-level promisify/constants block. On Node 22.9 zstdCompress
+    # / zstdDecompress are undefined and constants.ZSTD_* are undefined, so
+    # `promisify(undefined)` and `constants.ZSTD_c_checksumFlag` would throw at
+    # module load. Make them lazy: the async lambdas resolve on first use (the
+    # zstd path is never taken on iOS, where compression is 'none').
+    lazy_block = re.compile(
+        r'const zstdCompressAsync = promisify\(zstdCompress\);\s*\n\s*const zstdDecompressAsync = promisify\(zstdDecompress\);\s*\n\s*const CHECKSUM_OPTIONS = \{ params: \{ \[constants\.ZSTD_c_checksumFlag\]: 1 \} \};\s*\n\s*const INCOMPLETE_FRAME_OPTIONS = \{ finishFlush: constants\.ZSTD_e_flush \};',
+        re.S,
+    )
+    lazy_repl = (
+        'const zstdCompressAsync = (input, opts) => (zstdCompress ? promisify(zstdCompress)(input, opts) : Promise.reject(new Error("zstd unavailable on iOS")));\n'
+        'const zstdDecompressAsync = (input, opts) => (zstdDecompress ? promisify(zstdDecompress)(input, opts) : Promise.reject(new Error("zstd unavailable on iOS")));\n'
+        'const CHECKSUM_OPTIONS = { params: { [constants?.ZSTD_c_checksumFlag ?? 1]: 1 } };\n'
+        'const INCOMPLETE_FRAME_OPTIONS = { finishFlush: constants?.ZSTD_e_flush ?? 0 };\n'
+    )
+    new_s, n2 = lazy_block.subn(lazy_repl, s, count=1)
+    if n2 == 1:
+        s = new_s
+    if n == 1 or n2 == 1:
+        open(idx, 'w', encoding='utf-8').write(s)
+        print(f'patched zstd import/init: {idx}')
+        found = True
+        break
+if not found:
+    print('WARN: session-persistence-jsonl lib/index.js not patched (layout changed?)')
+PYZSTD
 
 # -- 4. copy into the app (symlinks preserved) ------------------------------
 TPL_DIR="$SCRIPT_DIR/../ios-app/nodejs-project"

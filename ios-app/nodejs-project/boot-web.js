@@ -36,18 +36,43 @@ const BIN_NAME = 'dsh'
  *  - code-runtime            — worker_threads unsupported by nodejs-mobile.
  *  - llm-pi-ai               — its identifier regex uses \p{ID_Start} (the
  *    intl-less iOS V8 cannot compile Unicode property escapes).
- *  - session-persistence-jsonl — needs node:zlib#createZstdDecompress (missing
- *    in Node 22.9).
- *  - attachment-local / sandbox(rd) — load native modules (sharp / koffi) that
- *    cannot exist on iOS.
+ *
+ * Both are NON-core rows: disabling them leaves the services the web UI needs
+ * intact (the `llm` seam is still provided by dsh-llm-deepseek). The three
+ * providers whose services are load-bearing for the web surface —
+ * session-persistence-jsonl (sessionPersistence), attachment-local
+ * (attachments), sandbox (sandbox / fs-sandbox) — MUST NOT be disabled: the
+ * web API gateway (host-apiproxy) hard-injects `attachments` and `sessions`,
+ * so disabling any of them leaves the whole web tree pending. Those three are
+ * instead made import-safe on iOS by prepare-dsh-dist.sh (native addons
+ * stubbed, zstd fallback). Only code-runtime and llm-pi-ai are disabled here.
+ *
+ * This overlay is only for the iOS runtime. The same boot-web.js drives the
+ * Linux smoke test (payload step), on which these rows must stay enabled —
+ * the desktop smoke asserts the exact cordis-import path, not an iOS tree.
  */
-const IOS_OVERLAY = [
-  { id: 'code-runtime', disabled: true },
-  { id: 'llm-pi-ai', disabled: true },
-  { id: 'session-persistence-jsonl', disabled: true },
-  { id: 'attachment-local', disabled: true },
-  { id: 'sandbox', disabled: true },
-]
+const IS_IOS = process.platform === 'ios'
+/**
+ * iOS overlay rows, built at boot time so `root` resolves against the launched
+ * DSH_HOME (the base row's `dshHomePath('sessions')` is lazy; evaluating it at
+ * module load would use an unset DSH_HOME and fall back to `~/.dsh`).
+ */
+function iosOverlay(dshHome) {
+  if (!IS_IOS) return []
+  return [
+    { id: 'code-runtime', disabled: true },
+    { id: 'llm-pi-ai', disabled: true },
+    // Node 22.9 (nodejs-mobile) has no node:zlib zstd API. The backend is
+    // made import-safe by prepare-dsh-dist.sh (zstd.js loads zlib lazily);
+    // pinning compression to `none` here means the zstd path is never taken,
+    // so session persistence runs on JSONL plaintext. A patch REPLACES the
+    // row's whole config, so root is restated from the base row.
+    {
+      id: 'session-persistence-jsonl',
+      config: { root: join(dshHome, 'sessions'), compression: 'none' },
+    },
+  ]
+}
 
 export async function bootWeb(dshHome) {
   process.env.DSH_HOME = dshHome
@@ -80,7 +105,7 @@ export async function bootWeb(dshHome) {
   const patches = [
     ...profile.layers.flatMap((layer) => layer.patches),
     ...profile.patches,
-    ...IOS_OVERLAY,
+    ...iosOverlay(dshHome),
   ]
   console.log('boot-web: patch layers =', patches.length)
 
