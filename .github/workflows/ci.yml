@@ -250,12 +250,19 @@ jobs:
             -archivePath build/DSHMobile.xcarchive \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             archive
-          xcodebuild -exportArchive -archivePath build/DSHMobile.xcarchive \
-            -exportPath build/ipa -exportOptionsPlist ios-app/ExportOptions.plist
+          # The archive is intentionally unsigned (CODE_SIGNING_ALLOWED=NO), so
+          # `xcodebuild -exportArchive` refuses: it validates a signing Team,
+          # which a team-less unsigned build cannot satisfy ("No Team Found in
+          # Archive", exit 70). Package the archived .app straight into an IPA —
+          # the same Payload/ layout an export produces, without signing.
+          mkdir -p build/ipa/Payload
+          cp -R build/DSHMobile.xcarchive/Products/Applications/DSHMobile.app build/ipa/Payload/
+          (cd build/ipa && zip -qry ../DSHMobile-unsigned.ipa Payload)
           ls -la build/ipa
+          ls -la build/DSHMobile-unsigned.ipa
 
       - uses: actions/upload-artifact@v4
         with:
           name: DSHMobile-unsigned-ipa
-          path: build/ipa/DSHMobile.ipa
+          path: build/DSHMobile-unsigned.ipa
           retention-days: 30
