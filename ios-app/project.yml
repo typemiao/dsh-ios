@@ -3,7 +3,7 @@
 #   brew install xcodegen && xcodegen generate
 name: DSHMobile
 options:
-  bundleIdPrefix: com.dsh.ios
+  bundleIdPrefix: com.typemiao
   deploymentTarget:
     iOS: "15.0"
   createIntermediateGroups: true
@@ -27,7 +27,7 @@ targets:
     resources: []
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.dsh.ios.DSHMobile
+        PRODUCT_BUNDLE_IDENTIFIER: com.typemiao.dshmobile
         INFOPLIST_FILE: DSHMobile/Info.plist
         TARGETED_DEVICE_FAMILY: "1"
         LD_RUNPATH_SEARCH_PATHS:

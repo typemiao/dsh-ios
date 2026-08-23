@@ -238,6 +238,63 @@ for root, dirs, files in os.walk('.'):
             shutil.copy2(target, p)
         deref += 1
 print("deref escapee links:", deref)
+
+# 3d. shorten OVER-LONG `.pnpm/<store>` directory names. installd on iOS caps
+# path length (~255 chars); pnpm stores carry the full package identity in the
+# store dir name (e.g. `@deepseek-ai+dsh-client-ui-trajectory@file+packages+...`
+# can reach 120 chars), so a deep bundled path exceeds the cap and installd
+# rejects the bundle with 0xe8008017 ("A signed resource has been added,
+# modified, or deleted"). Shorten any store basename longer than LIMIT to a
+# short `p-<sha1-12>` and rewrite every symlink target + `.modules.yaml` key
+# that references the old name. Package contents and the store -> node_modules
+# -> pkg structure are untouched; Node resolves symlinks at runtime, so the
+# rename never changes what a package resolves to.
+import hashlib as _hl
+LIMIT = 60
+_pnpm = os.path.join('.', 'node_modules', '.pnpm')
+_old_to_new = {}
+for _name in os.listdir(_pnpm):
+    if _name == 'node_modules':
+        continue
+    if len(_name) > LIMIT:
+        _h = _hl.sha1(_name.encode('utf-8')).hexdigest()[:12]
+        _new = 'p-' + _h
+        _old_to_new[_name] = _new
+if _old_to_new:
+    for _old, _new in _old_to_new.items():
+        _src = os.path.join(_pnpm, _old)
+        _dst = os.path.join(_pnpm, _new)
+        if os.path.exists(_dst):
+            continue
+        os.rename(_src, _dst)
+    # rewrite symlink targets (relative targets carry the store basename)
+    _links = 0
+    for _root, _dirs, _files in os.walk('.', followlinks=False):
+        for _n in _dirs + _files:
+            _p = os.path.join(_root, _n)
+            if not os.path.islink(_p):
+                continue
+            _t = os.readlink(_p)
+            _nt = _t
+            for _old, _new in _old_to_new.items():
+                if _old in _nt:
+                    _nt = _nt.replace(_old, _new)
+            if _nt != _t:
+                os.unlink(_p)
+                os.symlink(_nt, _p)
+                _links += 1
+    print("shortened .pnpm store names:", len(_old_to_new), "links rewritten:", _links)
+    # rewrite .modules.yaml hoistedDependencies keys (they embed the long names)
+    _my = os.path.join('.', 'node_modules', '.modules.yaml')
+    if os.path.exists(_my):
+        _s = open(_my, encoding='utf-8').read()
+        _o = _s
+        for _old, _new in _old_to_new.items():
+            _s = _s.replace(_old, _new)
+        if _s != _o:
+            open(_my, 'w', encoding='utf-8').write(_s)
+else:
+    print("no over-long .pnpm store names (all <= %d)" % LIMIT)
 PYEOF
 
 # sanity (post-repair): the bundle/profile packages and the web UI must be present

@@ -244,6 +244,10 @@ jobs:
 
       - name: Archive unsigned IPA (device slice)
         run: |
+          # Unsigned build: Sideloadly re-signs with the user's Apple ID itself
+          # (Corellium: "regardless of the existing signature, as long as it's
+          # not encrypted"), so no pre-signing is needed. A bare
+          # CODE_SIGNING_ALLOWED=NO build is cleanest for that flow.
           xcodebuild -project ios-app/DSHMobile.xcodeproj \
             -scheme DSHMobile -configuration Release \
             -destination 'generic/platform=iOS' \

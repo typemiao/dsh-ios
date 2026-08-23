@@ -42,7 +42,7 @@ echo "==> app: $APP_PATH"
 xcrun simctl boot "$DEVICE" 2>/dev/null || true
 open -a Simulator || true
 xcrun simctl install "$DEVICE" "$APP_PATH"
-BUNDLE_ID="com.dsh.ios.DSHMobile"
+BUNDLE_ID="com.typemiao.dshmobile"
 echo "==> launching with DSH_IOS_PHASE=$PHASE"
 SIMCTL_CHILD_DSH_IOS_PHASE="$PHASE" xcrun simctl launch "$DEVICE" "$BUNDLE_ID"
 
