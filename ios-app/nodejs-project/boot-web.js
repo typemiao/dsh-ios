@@ -31,13 +31,22 @@ const PROFILE = 'web'
 const BIN_NAME = 'dsh'
 
 /**
- * iOS milestone overlay: rows that cannot work on the device get disabled.
- *  - code-runtime (dsh-code-runtime-worker-thread) — relies on worker_threads,
- *    which nodejs-mobile does not support; keep the web UI surface complete
- *    while leaving code execution for a later phase.
+ * iOS milestone overlay: rows that cannot work on the device get disabled
+ * (keep the web UI surface complete; push these back to a later phase).
+ *  - code-runtime            — worker_threads unsupported by nodejs-mobile.
+ *  - llm-pi-ai               — its identifier regex uses \p{ID_Start} (the
+ *    intl-less iOS V8 cannot compile Unicode property escapes).
+ *  - session-persistence-jsonl — needs node:zlib#createZstdDecompress (missing
+ *    in Node 22.9).
+ *  - attachment-local / sandbox(rd) — load native modules (sharp / koffi) that
+ *    cannot exist on iOS.
  */
 const IOS_OVERLAY = [
   { id: 'code-runtime', disabled: true },
+  { id: 'llm-pi-ai', disabled: true },
+  { id: 'session-persistence-jsonl', disabled: true },
+  { id: 'attachment-local', disabled: true },
+  { id: 'sandbox', disabled: true },
 ]
 
 export async function bootWeb(dshHome) {
