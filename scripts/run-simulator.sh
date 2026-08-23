@@ -46,21 +46,30 @@ BUNDLE_ID="com.dsh.ios.DSHMobile"
 echo "==> launching with DSH_IOS_PHASE=$PHASE"
 SIMCTL_CHILD_DSH_IOS_PHASE="$PHASE" xcrun simctl launch "$DEVICE" "$BUNDLE_ID"
 
-# 4. tail the mirrored node console (Application Support inside the sandbox)
+# 4. wait for the phase OUTCOME (success marker OR a fatal boot error), then
+#    dump the FULL console log — tailing right after 'node up' would miss the
+#    boot failure that develops later.
+case "$PHASE" in
+  1) MARKER="node up" ;;
+  2) MARKER="dsh core import OK" ;;
+  3) MARKER="dsh web booted" ;;
+  *) MARKER="" ;;
+esac
 DATA_DIR=$(xcrun simctl get_app_container "$DEVICE" "$BUNDLE_ID" data 2>/dev/null || true)
 LOG="$DATA_DIR/Library/Application Support/node-console.log"
-echo "==> tailing $LOG"
-{ [ -f "$LOG" ] && : > "$LOG"; } || true
+echo "==> waiting for outcome in $LOG"
 for i in $(seq 1 240); do
   if [ -f "$LOG" ]; then
-    if grep -q "node up" "$LOG" 2>/dev/null || grep -q "FATAL" "$LOG" 2>/dev/null || grep -q "dsh web:" "$LOG" 2>/dev/null; then
+    if grep -q "$MARKER" "$LOG" 2>/dev/null || grep -q "FATAL" "$LOG" 2>/dev/null; then
       break
     fi
   fi
   sleep 1
 done
-echo "-- node console --"
-tail -50 "$LOG" 2>/dev/null || echo "(no log yet)"
+echo "---- node console (full) ----"
+if [ -f "$LOG" ]; then cat "$LOG" 2>/dev/null || echo "(unreadable)"; else echo "(no log at $LOG)"; fi
+echo "---- other node-console.log locations ----"
+find "$DATA_DIR" -name 'node-console.log' 2>/dev/null | head -5 || true
 
 # 5. gate on the phase's success marker (CI needs a hard pass/fail)
 case "$PHASE" in
