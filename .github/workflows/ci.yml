@@ -82,7 +82,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: nodejs-mobile/out_ios_${{ matrix.arch }}
-          key: node-mobile-${{ matrix.arch }}-106c51f9-v1
+          key: node-mobile-${{ matrix.arch }}-106c51f9-${{ hashFiles('patches/**', 'scripts/build-nodejs-mobile.sh') }}
 
       - name: Build ${{ matrix.arch }} slice
         if: steps.cache.outputs.cache-hit != 'true'
@@ -107,12 +107,13 @@ jobs:
 
       # The payload is pinned to deepseek-harness@fdab3aad, so it never changes.
       # Cache the assembled payload and skip the clone+pnpm+assemble on a hit.
+      # The key also hashes main.js/boot-web.js (copied into the payload).
       - name: Restore cached payload
         id: cache
         uses: actions/cache@v4
         with:
           path: payload-cache
-          key: dsh-payload-fdab3aad-v1
+          key: dsh-payload-fdab3aad-${{ hashFiles('ios-app/nodejs-project/main.js', 'ios-app/nodejs-project/boot-web.js') }}
 
       - uses: actions/setup-node@v4
         if: steps.cache.outputs.cache-hit != 'true'

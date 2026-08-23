@@ -79,18 +79,32 @@ export async function bootWeb(dshHome) {
   //    and the web app's command line (--host/--port), consumed by the
   //    web-startup provider (dsh-web-app/startup) and the webserver row.
   const portArg = process.env.DSH_IOS_PORT ?? '3080'
-  const ctx = await boot(BIN_NAME, rootConfig, patches, (hostCtx) => {
-    hostCtx.provide(
-      DSH_LAUNCH_ENVIRONMENT_KEY,
-      createLaunchEnvironmentSnapshot([{ source: 'process', values: process.env }]),
-    )
-    provideCmdline(hostCtx, {
-      args: ['--host', '127.0.0.1', '--port', portArg],
-      exit: (code) => {
-        console.log('boot-web: dsh requested exit', code)
-      },
+  let ctx
+  try {
+    ctx = await boot(BIN_NAME, rootConfig, patches, (hostCtx) => {
+      hostCtx.provide(
+        DSH_LAUNCH_ENVIRONMENT_KEY,
+        createLaunchEnvironmentSnapshot([{ source: 'process', values: process.env }]),
+      )
+      provideCmdline(hostCtx, {
+        args: ['--host', '127.0.0.1', '--port', portArg],
+        exit: (code) => {
+          console.log('boot-web: dsh requested exit', code)
+        },
+      })
     })
-  })
+  } catch (err) {
+    // dump the full error tree (the loader wraps per-entry failures in an
+    // AggregateError whose individual reasons the default console print hides)
+    const dump = (e, depth) => {
+      const pad = '  '.repeat(depth)
+      console.error(`${pad}> ${e && e.message ? e.message : String(e)}`)
+      if (e && Array.isArray(e.errors)) e.errors.forEach((x) => dump(x, depth + 1))
+      if (e && e.cause && e.cause !== e) dump(e.cause, depth + 1)
+    }
+    dump(err, 0)
+    throw err
+  }
 
   const webServer = ctx.get('webServer')
   const port = webServer?.port ?? 'unknown'
