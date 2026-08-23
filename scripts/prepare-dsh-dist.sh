@@ -504,7 +504,12 @@ PYZSTD
 python3 - "$STAGE" <<'PYREPATH'
 import os, hashlib, sys
 stage = sys.argv[1]
-LIMIT = 60
+# Shorten every .pnpm store basename longer than 40 chars. A store as short as
+# 52 chars (e.g. '@mistralai+mistralai@2.2.6_@opentelemetry+api@1.9.0') is still
+# enough, combined with the package's deep lib/ path, to push a bundled path to
+# 267 chars — over installd's ~255 cap (which yields 0xe8008017). LIMIT=40
+# shortens the 29 longest stores and brings the worst path to 232, safely under.
+LIMIT = 40
 _pnpm = os.path.join(stage, 'node_modules', '.pnpm')
 _old_to_new = {}
 for _name in os.listdir(_pnpm):
