@@ -414,18 +414,28 @@ fi
 # which throws at import time -> the whole cordis include apply fails. Make
 # the zlib access lazy so the module imports cleanly and only the zstd path
 # (never taken on iOS, where compression is 'none') resolves zlib.
+#
+# The .pnpm store may hold multiple hardlinked copies of the package (the peer
+# layout plus the store), and the loader resolves whichever path the app uses.
+# Walk the WHOLE staging tree and patch EVERY session-persistence-jsonl
+# lib/index.js so no unpatched copy survives. Fail loud if none is found —
+# a silent no-op is why the iOS import regressed.
 python3 - "$STAGE" <<'PYZSTD'
 import os, sys, re
 stage = sys.argv[1]
-# The compiled backend bundles zstd and imports zlib at top level. Patch the
-# deployed lib/index.js of session-persistence-jsonl.
-target = os.path.join(stage, 'node_modules', '.pnpm')
-cb = '@deepseek-ai+dsh-session-persistence-jsonl@'
-found = False
-for root, dirs, files in os.walk(target):
-    if cb not in root:
+# Match BOTH layouts the deployed payload can hold:
+#   (.pnpm store)   node_modules/.pnpm/@deepseek-ai+dsh-session-persistence-jsonl@.../node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
+#   (peer area)     node_modules/.pnpm/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
+# The loader resolves the package through its node_modules path, which is the
+# peer-area copy for the repaired layout (prepare-dsh-dist.sh step 3a) — the
+# .pnpm store copy is a different hardlink. Patch EVERY copy.
+patched = []
+for root, dirs, files in os.walk(stage, followlinks=False):
+    # Match the PACKAGE directory (basename), not its lib/ subdir (which would
+    # double the 'lib' segment in the join below).
+    if os.path.basename(root) != 'dsh-session-persistence-jsonl':
         continue
-    idx = os.path.join(root, 'node_modules', '@deepseek-ai', 'dsh-session-persistence-jsonl', 'lib', 'index.js')
+    idx = os.path.join(root, 'lib', 'index.js')
     if not os.path.exists(idx):
         continue
     s = open(idx, encoding='utf-8').read()
@@ -471,11 +481,12 @@ for root, dirs, files in os.walk(target):
         s = new_s
     if n == 1 or n2 == 1:
         open(idx, 'w', encoding='utf-8').write(s)
+        patched.append(idx)
         print(f'patched zstd import/init: {idx}')
-        found = True
-        break
-if not found:
-    print('WARN: session-persistence-jsonl lib/index.js not patched (layout changed?)')
+if not patched:
+    print('FATAL: no session-persistence-jsonl lib/index.js patched (layout changed?)', file=sys.stderr)
+    sys.exit(1)
+print(f'patched {len(patched)} session-persistence-jsonl copy(ies)')
 PYZSTD
 
 # -- 4. copy into the app (symlinks preserved) ------------------------------
