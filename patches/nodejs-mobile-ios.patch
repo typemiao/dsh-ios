@@ -73,7 +73,7 @@ index 400da5d..02587b4 100644
  				F6D008C32AD14FAE00FB3D3D /* libbase64_sse41.a in Frameworks */,
  				D9A761A41F7C63A8006AFE86 /* libopenssl.a in Frameworks */,
 diff --git a/tools/ios_framework_prepare.sh b/tools/ios_framework_prepare.sh
-index 9885866..cb139c1 100644
+index 9885866..9375d9a 100644
 --- a/tools/ios_framework_prepare.sh
 +++ b/tools/ios_framework_prepare.sh
 @@ -27,6 +27,10 @@ declare -a outputs_common=(
@@ -97,7 +97,7 @@ index 9885866..cb139c1 100644
      "libv8_zlib.a"
      "libzlib.a"
  )
-@@ -57,37 +64,55 @@ declare -a outputs_arm64_only=(
+@@ -57,8 +64,25 @@ declare -a outputs_arm64_only=(
  declare -a outputs_x64=("${outputs_common[@]}" "${outputs_x64_only[@]}")
  declare -a outputs_arm64=("${outputs_common[@]}" "${outputs_arm64_only[@]}")
  
@@ -124,13 +124,7 @@ index 9885866..cb139c1 100644
    GYP_DEFINES="target_arch=arm64 host_os=mac target_os=ios"
    export GYP_DEFINES
    ./configure \
-     --dest-os=ios \
-     --dest-cpu=arm64 \
--    --with-intl=none \
-+    --with-intl=full-icu \
-     --cross-compiling \
-     --enable-static \
-     --openssl-no-asm \
+@@ -71,17 +95,18 @@ build_for_arm64_device() {
      --v8-options=--jitless \
      --without-node-code-cache \
      --without-node-snapshot
@@ -152,13 +146,6 @@ index 9885866..cb139c1 100644
    GYP_DEFINES="target_arch=arm64 host_os=mac target_os=ios"
    export GYP_DEFINES
    ./configure \
-     --dest-os=ios \
-     --dest-cpu=arm64 \
--    --with-intl=none \
-+    --with-intl=full-icu \
-     --cross-compiling \
-     --enable-static \
-     --openssl-no-asm \
 @@ -95,12 +120,13 @@ build_for_arm64_simulator() {
      --without-node-code-cache \
      --without-node-snapshot \
@@ -175,15 +162,7 @@ index 9885866..cb139c1 100644
    done
  }
  
-@@ -111,19 +137,20 @@ build_for_x64_simulator() {
-   arch -x86_64 ./configure \
-     --dest-os=ios \
-     --dest-cpu=x64 \
--    --with-intl=none \
-+    --with-intl=full-icu \
-     --cross-compiling \
-     --enable-static \
-     --openssl-no-asm \
+@@ -118,12 +144,13 @@ build_for_x64_simulator() {
      --v8-options=--jitless \
      --without-node-code-cache \
      --without-node-snapshot

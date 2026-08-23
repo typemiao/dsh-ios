@@ -107,13 +107,14 @@ jobs:
 
       # The payload is pinned to deepseek-harness@fdab3aad, so it never changes.
       # Cache the assembled payload and skip the clone+pnpm+assemble on a hit.
-      # The key also hashes main.js/boot-web.js (copied into the payload).
+      # The key hashes main.js/boot-web.js (copied in) AND prepare-dsh-dist.sh
+      # (the harness source patches it runs must invalidate the cache).
       - name: Restore cached payload
         id: cache
         uses: actions/cache@v4
         with:
           path: payload-cache
-          key: dsh-payload-fdab3aad-${{ hashFiles('ios-app/nodejs-project/main.js', 'ios-app/nodejs-project/boot-web.js') }}
+          key: dsh-payload-fdab3aad-${{ hashFiles('ios-app/nodejs-project/main.js', 'ios-app/nodejs-project/boot-web.js', 'scripts/prepare-dsh-dist.sh') }}
 
       - uses: actions/setup-node@v4
         if: steps.cache.outputs.cache-hit != 'true'

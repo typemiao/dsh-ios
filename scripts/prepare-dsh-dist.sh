@@ -44,7 +44,25 @@ echo "==> out dir  : $OUT"
 
 cd "$REPO"
 
-# -- 0. pnpm 11 deploy compatibility -----------------------------------------
+# -- 0. patch Unicode XID regexes for the iOS V8 ------------------------------
+# The ios nodejs-mobile runtime is built with --with-intl=none, so V8 does not
+# support \p{XID_Start}/\p{XID_Continue}: compiling them throws
+# "Invalid property name in character class" when the web bundle imports
+# packages/core/tools (py-types.ts), which fails every cordis loader entry.
+# dsh only uses ASCII identifiers, so an ASCII-safe equivalent is equivalent.
+python3 - <<'PY'
+import os
+p = 'packages/core/tools/src/py-types.ts'
+if os.path.exists(p):
+    s = open(p, encoding='utf-8').read()
+    s = s.replace(r'/^[\p{XID_Start}_]\p{XID_Continue}*$/u', r'/^[A-Za-z_][A-Za-z0-9_]*$/u')
+    s = s.replace(r'/[^\p{XID_Continue}]+|_+/u', r'/[^A-Za-z0-9_]+|_+/u')
+    s = s.replace(r'/^\p{XID_Start}/u', r'/^[A-Za-z_]/u')
+    open(p, 'w', encoding='utf-8').write(s)
+    print('patched py-types.ts XID regexes (ASCII-safe)')
+PY
+
+# -- 0b. pnpm 11 deploy compatibility ----------------------------------------
 # pnpm >=11 ships a new deploy engine that fails on this workspace
 # ("Deployment with a shared lockfile has failed") unless the legacy deploy
 # path is forced. Add the flag if the workspace does not set it yet. (The Mac
