@@ -289,40 +289,47 @@ PTY
 PTY
 fi
 
-# sharp: rewrite package.json main/exports to a pure-JS stub. The shipped
+# sharp: rewrite package.json main/exports to a platform-gated stub. The shipped
 # sharp has main->./dist/index.cjs and exports->./dist/index.mjs: writing a
 # bare index.js (the old approach) never redirected the loader. Rewriting the
 # package.json so both import and require hit the stub makes `import sharp
 # from 'sharp'` (attachment-local/image.ts) resolve without touching libvips.
+# The same payload ships to Linux (smoke) and iOS, so on non-iOS the stub
+# delegates to the REAL sharp; only on iOS does it return the inert stub.
 SHARP=$(find "$STAGE/node_modules/.pnpm" -maxdepth 1 -type d -name 'sharp@*' | head -1)
 if [ -n "$SHARP" ]; then
   SHARP="$SHARP/node_modules/sharp"
   cat > "$SHARP/ios-shim.cjs" <<'SHARP'
-// Pure-JS iOS shim for sharp (native addon unavailable on iOS).
+// Platform-gated iOS shim for sharp (native addon unavailable on iOS).
 'use strict'
-function sharp() {
-  throw new Error('sharp is not available on iOS (native addon)')
-}
-sharp.format = {}
-sharp.versions = {}
-sharp.available = {}
-sharp.cache = () => sharp
+const { createRequire } = require('node:module')
+function die() { throw new Error('sharp is not available on iOS (native addon)') }
+const isIOS = process.platform === 'ios'
+const real = isIOS ? null : createRequire(__filename)('./dist/index.cjs')
+const sharp = isIOS
+  ? (function () { const f = die; f.format = {}; f.versions = {}; f.available = {}; f.cache = () => f; return f })()
+  : real
 module.exports = sharp
 module.exports.default = sharp
+module.exports.format = sharp.format
+module.exports.versions = sharp.versions
+module.exports.available = sharp.available
+module.exports.cache = sharp.cache
 SHARP
   cat > "$SHARP/ios-shim.mjs" <<'SHARP'
-// Pure-JS iOS shim for sharp (native addon unavailable on iOS).
-function sharp() {
-  throw new Error('sharp is not available on iOS (native addon)')
-}
-sharp.format = {}
-sharp.versions = {}
-sharp.available = {}
-sharp.cache = () => sharp
+// Platform-gated iOS shim for sharp (native addon unavailable on iOS).
+import { createRequire } from 'node:module'
+function die() { throw new Error('sharp is not available on iOS (native addon)') }
+const isIOS = process.platform === 'ios'
+const real = isIOS ? null : createRequire(import.meta.url)('./dist/index.cjs')
+const sharp = isIOS
+  ? (function () { const f = die; f.format = {}; f.versions = {}; f.available = {}; f.cache = () => f; return f })()
+  : real
 export default sharp
-export const format = {}
-export const versions = {}
-export const available = {}
+export const format = sharp.format
+export const versions = sharp.versions
+export const available = sharp.available
+export const cache = sharp.cache
 SHARP
   python3 - "$SHARP/package.json" <<'PYJSON'
 import json, sys
@@ -338,51 +345,42 @@ j['exports'] = {
 }
 json.dump(j, open(p, 'w', encoding='utf-8'), indent=2)
 PYJSON
-  echo "==> sharp stubbed (package.json exports -> ios-shim)"
+  echo "==> sharp gated stub (returns real sharp off-iOS, inert on iOS)"
 fi
 
 # koffi: native FFI module (used by dsh-sandbox-windows-acl). sandbox-local
 # imports @deepseek-ai/dsh-sandbox-windows-acl, whose ffi.js runs
-# koffi.pointer()/koffi.struct() at module top-level. On iOS the win32 ACL
-# runner is never invoked, so the stub only needs to satisfy import-time
-# descriptor calls (pointer/struct) and throw for runtime FFI (load/call).
-# Rewrite koffi's package.json exports to a pure-JS stub.
+# koffi.pointer()/koffi.struct() AND asserts struct sizes at module top-level
+# STARTUPINFOW must be 104, PROCESS_INFORMATION 24. On iOS the win32 runner is
+# never invoked, so the stub only needs import-time descriptor calls.
+#
+# The same payload ships to Linux (smoke) and iOS, so the stub must NOT degrade
+# Linux: on non-iOS it delegates to the REAL koffi; only on iOS does it return
+# the inert FFI stub (with the exact asserted sizes so the import assertions,
+# which run unconditionally, pass).
 KOFFI=$(find "$STAGE/node_modules/.pnpm" -maxdepth 1 -type d -name 'koffi@*' | head -1)
 if [ -n "$KOFFI" ]; then
   KOFFI="$KOFFI/node_modules/koffi"
   cat > "$KOFFI/ios-shim.js" <<'KOFFI'
-// Pure-JS iOS shim for koffi (native FFI addon unavailable on iOS).
-'use strict'
-// Inert descriptor objects for the import-time calls made by
-// dsh-sandbox-windows-acl/src/ffi.ts. Real FFI (load/call/decode/encode) is
-// never reached on iOS (the win32 runner is not selected), so those throw.
-class Ptr {
-  constructor(type) { this.type = type }
+// Platform-gated iOS shim for koffi (native FFI addon unavailable on iOS).
+import { createRequire } from 'node:module'
+// dsh-sandbox-windows-acl asserts these sizes at import; on iOS the inert stub
+// must still satisfy them so the module imports (the win32 runner is never
+// reached on darwin's seatbelt chain).
+function _pointer(type) { return { type } }
+function _struct(name, fields) {
+  const size = name === 'STARTUPINFOW' ? 104 : name === 'PROCESS_INFORMATION' ? 24 : 8
+  return { name, fields, size, pointer: () => _pointer(this) }
 }
-class Struct {
-  constructor(name, fields) { this.name = name; this.fields = fields }
-  get size() { return 8 }
-  pointer() { return new Ptr(this) }
-}
-function _pointer(type) { return new Ptr(type) }
-function _struct(name, fields) { return new Struct(name ?? 'anon', fields ?? {}) }
 function die() { throw new Error('koffi is not available on iOS (native FFI addon)') }
-const koffi = {
+const IOS_STUB = {
   pointer: _pointer,
   struct: _struct,
-  load: die,
-  call: die,
-  decode: die,
-  encode: die,
-  alloc: die,
-  address: die,
-  proto: die,
-  register: die,
-  unregister: die,
-  sizeof: () => 8,
-  view: die,
-  free: die,
+  load: die, call: die, decode: die, encode: die, alloc: die, address: die,
+  proto: die, register: die, unregister: die, sizeof: () => 8, view: die, free: die,
 }
+const IS_IOS = process.platform === 'ios'
+const koffi = IS_IOS ? IOS_STUB : createRequire(import.meta.url)('./src/koffi/index.cjs')
 export default koffi
 export const pointer = koffi.pointer
 export const struct = koffi.struct
@@ -407,7 +405,7 @@ j['main'] = './ios-shim.js'
 j['exports'] = { '.': { 'types': './ios-shim.js', 'default': './ios-shim.js' } }
 json.dump(j, open(p, 'w', encoding='utf-8'), indent=2)
 PYJSON
-  echo "==> koffi stubbed (package.json exports -> ios-shim)"
+  echo "==> koffi gated stub (returns real koffi off-iOS, inert FFI on iOS)"
 fi
 
 # zstd: Node 22.9 (nodejs-mobile) builds node:zlib WITHOUT the zstd family
