@@ -74,7 +74,18 @@ jobs:
           xcode-select -p
           df -h /
 
+      # The framework is pinned to nodejs-mobile@106c51f9 + a fixed patch set,
+      # so it never changes between runs. Cache the built slice keyed on the pin
+      # and skip the ~2h V8 compile on a cache hit.
+      - name: Restore cached framework ${{ matrix.arch }} slice
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: nodejs-mobile/out_ios_${{ matrix.arch }}
+          key: node-mobile-${{ matrix.arch }}-106c51f9-v1
+
       - name: Build ${{ matrix.arch }} slice
+        if: steps.cache.outputs.cache-hit != 'true'
         run: ./scripts/build-nodejs-mobile.sh
         env:
           ARCH_ONLY: ${{ matrix.arch }}
@@ -94,14 +105,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The payload is pinned to deepseek-harness@fdab3aad, so it never changes.
+      # Cache the assembled payload and skip the clone+pnpm+assemble on a hit.
+      - name: Restore cached payload
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: payload-cache
+          key: dsh-payload-fdab3aad-v1
+
       - uses: actions/setup-node@v4
+        if: steps.cache.outputs.cache-hit != 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install pnpm 11.7.0
+        if: steps.cache.outputs.cache-hit != 'true'
         run: npm i -g pnpm@11.7.0
 
       - name: Clone deepseek-harness (public repo, pinned to the last 0.1.0-rc.5 commit)
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness "$HOME/deepseek-harness"
           # fdab3aad = the last master commit carrying 0.1.0-rc.5 (parent of the
@@ -115,18 +138,19 @@ jobs:
           git -C "$HOME/deepseek-harness" show HEAD:package.json | grep '"version"'
 
       - name: Assemble dsh runnable payload
-        run: ./scripts/prepare-dsh-dist.sh "$HOME/deepseek-harness" "$RUNNER_TEMP/payload"
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./scripts/prepare-dsh-dist.sh "$HOME/deepseek-harness" "$GITHUB_WORKSPACE/payload-cache"
 
       - name: Smoke test — boot dsh web on Linux, expect HTTP 200
         run: |
           echo "=== cosmokit diagnostics ==="
-          ls -la "$RUNNER_TEMP/payload/node_modules/.pnpm/node_modules/@deepseek-ai/" | grep -i cosmokit || echo "NO cosmokit in peer area"
-          ls -la "$RUNNER_TEMP/payload/node_modules/@deepseek-ai/" | grep -i cosmokit || echo "NO cosmokit at top level"
-          CORDIS_STORE="$(find "$RUNNER_TEMP/payload/node_modules/.pnpm" -maxdepth 1 -type d -name '@deepseek-ai+cordis@*' | head -1)"
+          ls -la "$GITHUB_WORKSPACE/payload-cache/node_modules/.pnpm/node_modules/@deepseek-ai/" | grep -i cosmokit || echo "NO cosmokit in peer area"
+          ls -la "$GITHUB_WORKSPACE/payload-cache/node_modules/@deepseek-ai/" | grep -i cosmokit || echo "NO cosmokit at top level"
+          CORDIS_STORE="$(find "$GITHUB_WORKSPACE/payload-cache/node_modules/.pnpm" -maxdepth 1 -type d -name '@deepseek-ai+cordis@*' | head -1)"
           echo "cordis store: $CORDIS_STORE"
           ls -la "$CORDIS_STORE/node_modules/@deepseek-ai/" 2>/dev/null | head -8 || echo "no store @deepseek-ai dir"
           DSH_HOME="$RUNNER_TEMP/dsh-home"
-          node "$RUNNER_TEMP/payload/main.js" "$DSH_HOME" "$RUNNER_TEMP/node-console.log" 3 \
+          node "$GITHUB_WORKSPACE/payload-cache/main.js" "$DSH_HOME" "$RUNNER_TEMP/node-console.log" 3 \
             > "$RUNNER_TEMP/boot.stdout.log" 2>&1 &
           BOOT_PID=$!
           ok=0
@@ -145,7 +169,7 @@ jobs:
       - name: Package payload
         run: |
           mkdir -p dist
-          tar -czf dist/dsh-dist.tar.gz -C "$RUNNER_TEMP/payload" .
+          tar -czf dist/dsh-dist.tar.gz -C "$GITHUB_WORKSPACE/payload-cache" .
 
       - uses: actions/upload-artifact@v4
         with:
