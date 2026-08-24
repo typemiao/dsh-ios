@@ -80,7 +80,11 @@ final class NodeRunner {
         // which channel node actually sees). position independent.
         let dshHome = Self.dshHome()
         let consoleLog = Self.nodeConsoleLogPath()
-        let phase = ProcessInfo.processInfo.environment["DSH_IOS_PHASE"] ?? "1"
+        // This shell's only job is to boot the dsh web UI (phase 3). Real device
+        // installs (Sideloadly) never inject DSH_IOS_PHASE (the simulator worked
+        // only because run-simulator.sh passed SIMCTL_CHILD_DSH_IOS_PHASE), so
+        // default to 3 and let the env var only override if explicitly set.
+        let phase = ProcessInfo.processInfo.environment["DSH_IOS_PHASE"] ?? "3"
         let probeLog = (dshHome as NSString).appendingPathComponent("dsh-probe.txt")
         setenv("DSH_ARCHIVE", archive.path, 1)
         setenv("DSH_RUNTIME", runtime, 1)
