@@ -108,6 +108,8 @@ async function extractTarGz(archive, root) {
   let longLink = ''
   const pendingHardlinks = []
   const pendingSymlinks = []
+  let count = 0
+  const t0 = Date.now()
 
   function finish(entry) {
     if (entry.fd !== undefined) closeSync(entry.fd)
@@ -174,6 +176,10 @@ async function extractTarGz(archive, root) {
       }
 
       if (!pathName) continue
+      count++
+      if (count % 500 === 0) {
+        mirror('LOG', `unpack progress: ${count} entries, ${((Date.now() - t0) / 1000).toFixed(0)}s`)
+      }
       const path = destination(root, pathName)
       mkdirSync(dirname(path), { recursive: true })
       if (type === '5') {
@@ -279,7 +285,9 @@ async function install() {
 
 try {
   if (CONSOLE_LOG) writeFileSync(CONSOLE_LOG, '')
+  mirror('LOG', 'unpack begin')
   await install()
+  mirror('LOG', 'unpack done — booting dsh from', RUNTIME)
   await import(pathToFileURL(join(RUNTIME, 'main.js')).href)
 } catch (error) {
   mirror('FATAL', error?.stack ?? error)
