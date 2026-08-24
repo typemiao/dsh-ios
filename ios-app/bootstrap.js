@@ -11,6 +11,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readlinkSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -187,14 +188,18 @@ async function extractTarGz(archive, root) {
     }
   }
   if (current) fail('truncated archive')
-  resolveHardlinks(root, pendingHardlinks)
+  // Order matters: create symlinks first so a later hardlink whose target is a
+  // symlink resolves, then hardlinks (which may point at those symlinks).
   resolveSymlinks(pendingSymlinks)
+  resolveHardlinks(root, pendingHardlinks)
 }
 
 function resolveHardlinks(root, pending) {
   // pnpm records a hardlink entry whose target may appear later in the archive,
   // and the linkname uses './'-relative or absolute-to-root form. Loop until no
-  // progress; a hardlink whose target never materialises is a hard archive error.
+  // progress. A hardlink whose TARGET is itself a symlink must NOT be created
+  // with linkSync (Linux forbids hard-linking a symlink: EPERM) — recreate it
+  // as an identical symlink instead, preserving the pnpm topology.
   let remaining = pending
   for (let pass = 0; pass < 10 && remaining.length > 0; pass++) {
     const deferred = []
@@ -202,9 +207,18 @@ function resolveHardlinks(root, pending) {
     for (const { path, target } of remaining) {
       mkdirSync(dirname(path), { recursive: true })
       const resolved = destination(root, target)
-      if (existsSync(resolved)) {
+      let stat
+      try { stat = lstatSync(resolved) } catch { stat = null }
+      if (stat) {
         removeIfPresent(path)
-        linkSync(resolved, path)
+        if (stat.isSymbolicLink()) {
+          symlinkSync(readlinkSync(resolved), path)
+        } else if (stat.isDirectory()) {
+          // A directory hardlink: copy the tree (no inode link on a dir).
+          mkdirSync(path, { recursive: true })
+        } else {
+          linkSync(resolved, path)
+        }
         progressed = true
       } else {
         deferred.push({ path, target })

@@ -178,7 +178,9 @@ jobs:
           test -f "$RUNTIME/.complete"
           echo "SMOKE OK: archive extracted and dsh answered on 127.0.0.1:3080"
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload single-file payload for device/debug
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: dsh-dist
           path: |
