@@ -11,7 +11,7 @@ dsh-iOS/
 ├── ios-app/
 │   ├── project.yml                  # XcodeGen 工程定义（工程源文件）
 │   ├── bootstrap.js                 # 首次启动：解包单文件载荷后 import runtime/main.js
-│   ├── dsh-dist.tar.gz              # CI 生成；App Store 签名资源里只有这一份大载荷
+│   ├── dsh_payload.bin              # CI 生成；App Store 签名资源里只有这一份大载荷
 │   ├── dsh-dist.version             # 载荷内容版本，控制原子换代/跳过重复解包
 │   ├── DSHMobile/
 │   │   ├── AppDelegate.swift        # 起引擎 + WKWebView
@@ -129,7 +129,7 @@ session 持久化、storage、profile 都落在那里。可重建的运行载荷
 | Job | 运行器 | 产物 |
 |---|---|---|
 | `framework`（arm64 / arm64-simulator 并行） | macOS 14（Apple Silicon） | 两个 xcframework 切片 |
-| `payload`（dsh 载荷 + Linux 桌面冒烟测试 HTTP 200） | ubuntu | `dsh-dist.tar.gz` |
+| `payload`（dsh 载荷 + Linux 桌面冒烟测试 HTTP 200） | ubuntu | `dsh_payload.bin` |
 | `app`（合成 xcframework → xcodegen → 模拟器跑阶段3 → 出 ipa） | macOS 14 | `DSHMobile.ipa`（未签名）+ 模拟器控制台日志 |
 
 **推送即触发**（push 到 main/master，或仓库 Actions 页面手动 Run workflow）。

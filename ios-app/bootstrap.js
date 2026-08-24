@@ -22,8 +22,17 @@ import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep 
 import { pathToFileURL } from 'node:url'
 import { createGunzip } from 'node:zlib'
 
-const [, , ARCHIVE = '', RUNTIME = '', VERSION = '', ...rest] = process.argv
-const [DSH_HOME = '', CONSOLE_LOG = '', PHASE = '1'] = rest.slice(-3)
+// Config arrives via env vars (see NodeRunner.swift): position-independent, and
+// avoids relying on process.argv[0] being "node" (nodejs-mobile makes it the
+// script path). Legacy argv fallback kept for the Linux smoke test, which passes
+// the same values as positional args.
+const env = process.env
+const ARCHIVE = env.DSH_ARCHIVE || process.argv[2] || ''
+const RUNTIME = env.DSH_RUNTIME || process.argv[3] || ''
+const VERSION = env.DSH_VERSION || process.argv[4] || ''
+const DSH_HOME = env.DSH_HOME || process.argv[5] || ''
+const CONSOLE_LOG = env.DSH_CONSOLE_LOG || process.argv[6] || ''
+const PHASE = env.DSH_PHASE || process.argv[7] || '1'
 
 function mirror(level, ...args) {
   const line = `[${new Date().toISOString()}] ${level} ${args.map(String).join(' ')}`

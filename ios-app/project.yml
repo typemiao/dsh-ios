@@ -25,7 +25,7 @@ targets:
       # Keep the signed resource envelope tiny. bootstrap.js expands the single
       # symlink-faithful tarball into Application Support before booting dsh.
       - path: bootstrap.js
-      - path: dsh-dist.tar.gz
+      - path: dsh_payload.bin
       - path: dsh-dist.version
     settings:
       base:

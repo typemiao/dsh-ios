@@ -4,16 +4,10 @@ import NodeMobile
 /**
  * Thin wrapper around the nodejs-mobile engine.
  *
- * The engine runs on a private background thread and blocks it for the
- * lifetime of the process; all JavaScript land lives there. We hand it:
- *   argv[1] -> tiny bootstrap.js in the signed app bundle
- *   argv[2] -> single dsh payload archive in the signed app bundle
- *   argv[3] -> versioned runtime directory below Application Support
- *   argv[-3...] -> writable DSH_HOME, console mirror path, milestone phase
- *
- * stdout/stderr from the engine do not reach the Xcode console by default on
- * iOS, so main.js mirrors console output to a log file in the sandbox
- * (`node-console.log`) which ConsoleTailer tails into NSLog.
+ * All runtime config is passed through ENVIRONMENT VARIABLES (not argv position)
+ * because nodejs-mobile's `process.argv[0]` is the script path, not the "node"
+ * binary, so positional argv assumptions are fragile. The engine runs on a
+ * private background thread and blocks it for the lifetime of the process.
  */
 final class NodeRunner {
 
@@ -57,18 +51,27 @@ final class NodeRunner {
 
         let resources = Bundle.main.resourceURL!
         let bootstrap = resources.appendingPathComponent("bootstrap.js")
-        let archive = resources.appendingPathComponent("dsh-dist.tar.gz")
+        let archive = resources.appendingPathComponent("dsh_payload.bin")
         let versionURL = resources.appendingPathComponent("dsh-dist.version")
+
         precondition(FileManager.default.fileExists(atPath: bootstrap.path),
                      "missing bootstrap.js in app bundle")
         precondition(FileManager.default.fileExists(atPath: archive.path),
-                     "missing dsh-dist.tar.gz in app bundle")
+                     "missing dsh_payload.bin in app bundle")
         precondition(FileManager.default.fileExists(atPath: versionURL.path),
                      "missing dsh-dist.version in app bundle")
         let version = (try? String(contentsOf: versionURL, encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
         precondition(!version.isEmpty && version != "unknown", "invalid dsh-dist.version")
         let runtime = Self.runtimePath(version: version)
+
+        // Inject config so bootstrap.js reads process.env.DSH_* — position-independent.
+        setenv("DSH_ARCHIVE", archive.path, 1)
+        setenv("DSH_RUNTIME", runtime, 1)
+        setenv("DSH_VERSION", version, 1)
+        setenv("DSH_HOME", Self.dshHome(), 1)
+        setenv("DSH_CONSOLE_LOG", Self.nodeConsoleLogPath(), 1)
+        setenv("DSH_PHASE", ProcessInfo.processInfo.environment["DSH_IOS_PHASE"] ?? "1", 1)
 
         // Keep a strong reference so the tailer keeps reading while the app runs.
         ConsoleTailer.shared.start(logPath: Self.nodeConsoleLogPath())
@@ -77,22 +80,7 @@ final class NodeRunner {
             guard let self else { return }
             var argv: [UnsafeMutablePointer<CChar>?] = [
                 strdup("node"),
-                // NOTE: do NOT pass --expose-internals here. With it, the cordis
-                // loader switches to the direct require('internal/modules/esm/loader')
-                // path, which fails on nodejs-mobile (Node 22.9 + jitless) with
-                // "loader entries failed to apply". The pure-JS
-                // node-addon-require-builtin shim (process.getBuiltinModule)
-                // reaches the internal loader and boots the tree — the exact path
-                // the Linux smoke test validates. bootstrap imports the
-                // extracted main.js in this same engine (never call node_start twice).
                 strdup(bootstrap.path),
-                strdup(archive.path),
-                strdup(runtime),
-                strdup(version),
-                // Keep these LAST: main.js deliberately parses rest.slice(-3).
-                strdup(Self.dshHome()),
-                strdup(Self.nodeConsoleLogPath()),
-                strdup(ProcessInfo.processInfo.environment["DSH_IOS_PHASE"] ?? "1"),
             ]
             argv.append(nil)
             self.exitCode = node_start(Int32(argv.count - 1), &argv)

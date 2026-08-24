@@ -11,8 +11,13 @@
 
 import { appendFileSync, writeFileSync } from 'node:fs'
 
+// Config arrives via env (set by bootstrap.js) when run under nodejs-mobile,
+// or as trailing argv when the Linux smoke test runs main.js directly.
 const [, , ...rest] = process.argv
-const [DSH_HOME = '', CONSOLE_LOG = '', PHASE = '1'] = rest.slice(-3)
+const [A_DSH = '', A_LOG = '', A_PHASE = '1'] = rest.slice(-3)
+const DSH_HOME = process.env.DSH_HOME || A_DSH
+const CONSOLE_LOG = process.env.DSH_CONSOLE_LOG || A_LOG
+const PHASE = process.env.DSH_PHASE || A_PHASE
 
 // ── console mirror (iOS has no attached stdout; the shell tails this file) ──
 if (CONSOLE_LOG) {

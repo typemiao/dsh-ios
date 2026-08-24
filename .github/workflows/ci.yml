@@ -150,16 +150,19 @@ jobs:
           # Python tarfile PAX_FORMAT so every long pathname/linkname is carried
           # as a PAX 'x' record (path=/linkpath=), which bootstrap.js parses.
           python3 scripts/pack-payload.py \
-            "$GITHUB_WORKSPACE/payload-cache" dist/dsh-dist.tar.gz dist/dsh-dist.version
+            "$GITHUB_WORKSPACE/payload-cache" dist/dsh_payload.bin dist/dsh-dist.version
           cp ios-app/bootstrap.js dist/bootstrap.js
-          ls -lh dist/dsh-dist.tar.gz dist/dsh-dist.version dist/bootstrap.js
+          ls -lh dist/dsh_payload.bin dist/dsh-dist.version dist/bootstrap.js
 
       - name: Smoke test — extract the shipped archive, boot dsh, expect HTTP 200
         run: |
           DSH_HOME="$RUNNER_TEMP/dsh-home"
           RUNTIME="$RUNNER_TEMP/dsh-runtime/$(cat dist/dsh-dist.version)"
+          DSH_ARCHIVE="$GITHUB_WORKSPACE/dist/dsh_payload.bin" \
+          DSH_RUNTIME="$RUNTIME" \
+          DSH_VERSION="$(cat dist/dsh-dist.version)" \
           node "$GITHUB_WORKSPACE/ios-app/bootstrap.js" \
-            "$GITHUB_WORKSPACE/dist/dsh-dist.tar.gz" "$RUNTIME" \
+            "$GITHUB_WORKSPACE/dist/dsh_payload.bin" "$RUNTIME" \
             "$(cat dist/dsh-dist.version)" \
             "$DSH_HOME" "$RUNNER_TEMP/node-console.log" 3 \
             > "$RUNNER_TEMP/boot.stdout.log" 2>&1 &
@@ -185,7 +188,7 @@ jobs:
         with:
           name: dsh-dist
           path: |
-            dist/dsh-dist.tar.gz
+            dist/dsh_payload.bin
             dist/dsh-dist.version
             dist/bootstrap.js
           retention-days: 30
@@ -224,10 +227,10 @@ jobs:
           path: dist
       - name: Copy the single-file payload resources into the Xcode app
         run: |
-          cp dist/dsh-dist.tar.gz ios-app/dsh-dist.tar.gz
+          cp dist/dsh_payload.bin ios-app/dsh_payload.bin
           cp dist/dsh-dist.version ios-app/dsh-dist.version
           cp dist/bootstrap.js ios-app/bootstrap.js
-          ls -lh ios-app/dsh-dist.tar.gz ios-app/dsh-dist.version ios-app/bootstrap.js
+          ls -lh ios-app/dsh_payload.bin ios-app/dsh-dist.version ios-app/bootstrap.js
 
       - name: Pick Xcode (same as the framework jobs — prefer 15.4)
         run: |
