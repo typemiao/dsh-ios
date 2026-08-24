@@ -114,7 +114,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: payload-cache
-          key: dsh-payload-fdab3aad-${{ hashFiles('ios-app/nodejs-project/main.js', 'ios-app/nodejs-project/boot-web.js', 'ios-app/bootstrap.js', 'scripts/prepare-dsh-dist.sh') }}
+          key: dsh-payload-fdab3aad-${{ hashFiles('ios-app/nodejs-project/main.js', 'ios-app/nodejs-project/boot-web.js', 'ios-app/bootstrap.js', 'scripts/prepare-dsh-dist.sh', 'scripts/pack-payload.py') }}
 
       - uses: actions/setup-node@v4
         if: steps.cache.outputs.cache-hit != 'true'
@@ -146,10 +146,11 @@ jobs:
       - name: Package single-file payload
         run: |
           mkdir -p dist
-          # Preserve the pnpm symlink topology inside ONE signed resource. GNU
-          # tar writes PAX/GNU long-name records; bootstrap.js supports them.
-          tar -czf dist/dsh-dist.tar.gz -C "$GITHUB_WORKSPACE/payload-cache" .
-          sha256sum dist/dsh-dist.tar.gz | cut -c1-16 > dist/dsh-dist.version
+          # Preserve the pnpm symlink topology inside ONE signed resource. Use
+          # Python tarfile PAX_FORMAT so every long pathname/linkname is carried
+          # as a PAX 'x' record (path=/linkpath=), which bootstrap.js parses.
+          python3 scripts/pack-payload.py \
+            "$GITHUB_WORKSPACE/payload-cache" dist/dsh-dist.tar.gz dist/dsh-dist.version
           cp ios-app/bootstrap.js dist/bootstrap.js
           ls -lh dist/dsh-dist.tar.gz dist/dsh-dist.version dist/bootstrap.js
 
