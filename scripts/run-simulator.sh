@@ -37,6 +37,16 @@ xcodebuild -project "$APP/DSHMobile.xcodeproj" \
 
 APP_PATH=$(find "$ROOT/.build/DerivedData/Build/Products" -name "DSHMobile.app" -type d | head -1)
 echo "==> app: $APP_PATH"
+# The bundle must carry the resources NodeRunner/precond requires; if XcodeGen
+# did not copy them, Node never starts and phase 3 produces no log. Fail loud.
+for r in bootstrap.js dsh_payload.bin dsh-dist.version; do
+  if [ ! -f "$APP_PATH/$r" ]; then
+    echo "MISSING BUNDLE RESOURCE: $r (bundle at $APP_PATH)" >&2
+    ls -la "$APP_PATH" | head -30
+    exit 1
+  fi
+done
+echo "==> bundle resources present (bootstrap.js, dsh_payload.bin, dsh-dist.version)"
 
 # 3. boot the device + install + launch
 xcrun simctl boot "$DEVICE" 2>/dev/null || true

@@ -21,12 +21,20 @@ targets:
     platform: iOS
     sources:
       - path: DSHMobile
-    resources:
       # Keep the signed resource envelope tiny. bootstrap.js expands the single
       # symlink-faithful tarball into Application Support before booting dsh.
+      # Declare each as an explicit file resource so XcodeGen copies them into
+      # the bundle (the loose `resources:` list did not, leaving the app with no
+      # bootstrap/dsh_payload and so no Node boot at all).
       - path: bootstrap.js
+        type: file
+        buildPhase: resources
       - path: dsh_payload.bin
+        type: file
+        buildPhase: resources
       - path: dsh-dist.version
+        type: file
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.typemiao.dshmobile
