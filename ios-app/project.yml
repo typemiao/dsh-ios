@@ -21,10 +21,12 @@ targets:
     platform: iOS
     sources:
       - path: DSHMobile
-      - path: nodejs-project
-        type: folder
-        buildPhase: resources
-    resources: []
+    resources:
+      # Keep the signed resource envelope tiny. bootstrap.js expands the single
+      # symlink-faithful tarball into Application Support before booting dsh.
+      - path: bootstrap.js
+      - path: dsh-dist.tar.gz
+      - path: dsh-dist.version
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.typemiao.dshmobile

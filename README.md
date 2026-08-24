@@ -1,7 +1,8 @@
 # DSH Mobile — dsh web 服务跑在 iOS（nodejs-mobile + WKWebView）
 
-极薄原生壳：Swift 起 nodejs-mobile 引擎跑 `main.js`，WKWebView 指向 `127.0.0.1:3080`。
-点火阶段只验证 dsh boot/core 进程内启动 + WebView 连上。
+极薄原生壳：Swift 起 nodejs-mobile 引擎，bundle 内只签一个 dsh `tar.gz` 载荷；首次启动由
+`bootstrap.js` 原子解包到 Application Support，再在同一 Node 进程加载 `main.js`。WKWebView 指向
+`127.0.0.1:3080`。点火阶段只验证 dsh boot/core 进程内启动 + WebView 连上。
 
 ## 目录结构
 
@@ -9,13 +10,16 @@
 dsh-iOS/
 ├── ios-app/
 │   ├── project.yml                  # XcodeGen 工程定义（工程源文件）
+│   ├── bootstrap.js                 # 首次启动：解包单文件载荷后 import runtime/main.js
+│   ├── dsh-dist.tar.gz              # CI 生成；App Store 签名资源里只有这一份大载荷
+│   ├── dsh-dist.version             # 载荷内容版本，控制原子换代/跳过重复解包
 │   ├── DSHMobile/
 │   │   ├── AppDelegate.swift        # 起引擎 + WKWebView
 │   │   ├── NodeRunner.swift         # nodejs-mobile 引擎封装（node_start）
 │   │   ├── ConsoleTailer.swift      # 把 node-console.log 尾巴打到 NSLog
 │   │   ├── WebViewController.swift  # 轮询 127.0.0.1:3080 后 load
 │   │   └── Info.plist               # 含 NSAllowsLocalNetworking（本地 HTTP）
-│   └── nodejs-project/
+│   └── nodejs-project/              # 载荷模板；不再作为 folder resource 直接签入 .app
 │       ├── main.js                  # 入口：console 镜像 + 按 PHASE 分派
 │       └── boot-web.js              # 阶段3：boot dsh web profile
 ├── scripts/
@@ -105,8 +109,10 @@ xcodebuild -exportArchive -archivePath build/DSHMobile.xcarchive \
 ## 阶段3 运行时的可写目录
 
 Swift 侧把沙盒可写目录（`Application Support/dsh`）通过 argv 传给 main.js 作为 `DSH_HOME`，
-session 持久化、storage、profile 都落在那里，绝不碰只读 bundle 目录。
-控制台输出通过 main.js 镜像到 `Application Support/node-console.log`，Swift 的 ConsoleTailer
+session 持久化、storage、profile 都落在那里。可重建的运行载荷解包到独立的
+`Application Support/dsh-runtime/<version>`（排除 iCloud 备份）；bundle 内只保留 bootstrap、版本文件和
+单个 tar.gz，避免把约 4.7 万个 pnpm 资源/符号链接放进 iOS CodeResources 签名清单。
+控制台输出由 bootstrap/main.js 镜像到 `Application Support/node-console.log`，Swift 的 ConsoleTailer
 把它尾随到 NSLog（iOS 无 tty，stdout 默认不可见）。
 
 ## 已知留白（点火阶段刻意不做）

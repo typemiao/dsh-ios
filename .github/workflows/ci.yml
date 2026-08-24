@@ -114,7 +114,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: payload-cache
-          key: dsh-payload-fdab3aad-${{ hashFiles('ios-app/nodejs-project/main.js', 'ios-app/nodejs-project/boot-web.js', 'scripts/prepare-dsh-dist.sh') }}
+          key: dsh-payload-fdab3aad-${{ hashFiles('ios-app/nodejs-project/main.js', 'ios-app/nodejs-project/boot-web.js', 'ios-app/bootstrap.js', 'scripts/prepare-dsh-dist.sh') }}
 
       - uses: actions/setup-node@v4
         if: steps.cache.outputs.cache-hit != 'true'
@@ -143,40 +143,48 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: ./scripts/prepare-dsh-dist.sh "$HOME/deepseek-harness" "$GITHUB_WORKSPACE/payload-cache"
 
-      - name: Smoke test — boot dsh web on Linux, expect HTTP 200
+      - name: Package single-file payload
         run: |
-          echo "=== cosmokit diagnostics ==="
-          ls -la "$GITHUB_WORKSPACE/payload-cache/node_modules/.pnpm/node_modules/@deepseek-ai/" | grep -i cosmokit || echo "NO cosmokit in peer area"
-          ls -la "$GITHUB_WORKSPACE/payload-cache/node_modules/@deepseek-ai/" | grep -i cosmokit || echo "NO cosmokit at top level"
-          CORDIS_STORE="$(find "$GITHUB_WORKSPACE/payload-cache/node_modules/.pnpm" -maxdepth 1 -type d -name '@deepseek-ai+cordis@*' | head -1)"
-          echo "cordis store: $CORDIS_STORE"
-          ls -la "$CORDIS_STORE/node_modules/@deepseek-ai/" 2>/dev/null | head -8 || echo "no store @deepseek-ai dir"
+          mkdir -p dist
+          # Preserve the pnpm symlink topology inside ONE signed resource. GNU
+          # tar writes PAX/GNU long-name records; bootstrap.js supports them.
+          tar -czf dist/dsh-dist.tar.gz -C "$GITHUB_WORKSPACE/payload-cache" .
+          sha256sum dist/dsh-dist.tar.gz | cut -c1-16 > dist/dsh-dist.version
+          cp ios-app/bootstrap.js dist/bootstrap.js
+          ls -lh dist/dsh-dist.tar.gz dist/dsh-dist.version dist/bootstrap.js
+
+      - name: Smoke test — extract the shipped archive, boot dsh, expect HTTP 200
+        run: |
           DSH_HOME="$RUNNER_TEMP/dsh-home"
-          node "$GITHUB_WORKSPACE/payload-cache/main.js" "$DSH_HOME" "$RUNNER_TEMP/node-console.log" 3 \
+          RUNTIME="$RUNNER_TEMP/dsh-runtime/$(cat dist/dsh-dist.version)"
+          node "$GITHUB_WORKSPACE/ios-app/bootstrap.js" \
+            "$GITHUB_WORKSPACE/dist/dsh-dist.tar.gz" "$RUNTIME" \
+            "$(cat dist/dsh-dist.version)" \
+            "$DSH_HOME" "$RUNNER_TEMP/node-console.log" 3 \
             > "$RUNNER_TEMP/boot.stdout.log" 2>&1 &
           BOOT_PID=$!
           ok=0
-          for i in $(seq 1 150); do
+          for i in $(seq 1 180); do
             if curl -sf -o /dev/null http://127.0.0.1:3080/; then ok=1; break; fi
+            if grep -q 'FATAL' "$RUNNER_TEMP/node-console.log" 2>/dev/null; then break; fi
             sleep 2
           done
           echo "── node-console.log tail ──"
-          tail -60 "$RUNNER_TEMP/node-console.log" 2>/dev/null || true
+          tail -80 "$RUNNER_TEMP/node-console.log" 2>/dev/null || true
           echo "── boot stdout tail ──"
-          tail -20 "$RUNNER_TEMP/boot.stdout.log" 2>/dev/null || true
+          tail -30 "$RUNNER_TEMP/boot.stdout.log" 2>/dev/null || true
           kill "$BOOT_PID" 2>/dev/null || true
-          [ "$ok" = 1 ] || { echo "SMOKE FAILED: dsh web did not answer"; exit 1; }
-          echo "SMOKE OK: dsh web answered on 127.0.0.1:3080"
-
-      - name: Package payload
-        run: |
-          mkdir -p dist
-          tar -czf dist/dsh-dist.tar.gz -C "$GITHUB_WORKSPACE/payload-cache" .
+          [ "$ok" = 1 ] || { echo "SMOKE FAILED: extracted dsh web did not answer"; exit 1; }
+          test -f "$RUNTIME/.complete"
+          echo "SMOKE OK: archive extracted and dsh answered on 127.0.0.1:3080"
 
       - uses: actions/upload-artifact@v4
         with:
           name: dsh-dist
-          path: dist/dsh-dist.tar.gz
+          path: |
+            dist/dsh-dist.tar.gz
+            dist/dsh-dist.version
+            dist/bootstrap.js
           retention-days: 30
 
   # ── 3. simulator phase-3 run + unsigned ipa ────────────────────────────────
@@ -211,10 +219,12 @@ jobs:
         with:
           name: dsh-dist
           path: dist
-      - run: |
-          mkdir -p ios-app/nodejs-project
-          tar -xzf dist/dsh-dist.tar.gz -C ios-app/nodejs-project
-          du -sh ios-app/nodejs-project
+      - name: Copy the single-file payload resources into the Xcode app
+        run: |
+          cp dist/dsh-dist.tar.gz ios-app/dsh-dist.tar.gz
+          cp dist/dsh-dist.version ios-app/dsh-dist.version
+          cp dist/bootstrap.js ios-app/bootstrap.js
+          ls -lh ios-app/dsh-dist.tar.gz ios-app/dsh-dist.version ios-app/bootstrap.js
 
       - name: Pick Xcode (same as the framework jobs — prefer 15.4)
         run: |

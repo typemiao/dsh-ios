@@ -58,7 +58,8 @@ esac
 DATA_DIR=$(xcrun simctl get_app_container "$DEVICE" "$BUNDLE_ID" data 2>/dev/null || true)
 LOG="$DATA_DIR/Library/Application Support/node-console.log"
 echo "==> waiting for outcome in $LOG"
-for i in $(seq 1 240); do
+# First launch expands ~300 MiB / tens of thousands of payload entries.
+for i in $(seq 1 600); do
   if [ -f "$LOG" ]; then
     if grep -q "$MARKER" "$LOG" 2>/dev/null || grep -q "FATAL" "$LOG" 2>/dev/null; then
       break

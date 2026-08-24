@@ -60,7 +60,7 @@ final class WebViewController: UIViewController {
                     self.webView.isHidden = false
                     self.pollTimer?.invalidate()
                     self.webView.load(URLRequest(url: self.url))
-                } else if self.attempts > 120 {
+                } else if self.attempts > 1200 {
                     self.statusLabel.text = "dsh did not come up on \(self.url.absoluteString)\n(\(error?.localizedDescription ?? "no response"))"
                     self.pollTimer?.invalidate()
                 } else {
