@@ -2,22 +2,9 @@
 // app container, then boot it in-process. Uses Node builtins only.
 
 import {
-  chmodSync,
-  closeSync,
-  createReadStream,
-  existsSync,
-  linkSync,
-  lstatSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  readlinkSync,
-  renameSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-  writeSync,
-  appendFileSync,
+  chmodSync, closeSync, createReadStream, existsSync, linkSync, lstatSync,
+  mkdirSync, openSync, readFileSync, readlinkSync, renameSync, rmSync,
+  symlinkSync, writeFileSync, writeSync, appendFileSync,
 } from 'node:fs'
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'

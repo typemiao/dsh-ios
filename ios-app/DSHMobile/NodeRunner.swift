@@ -55,12 +55,21 @@ final class NodeRunner {
         let archive = resources.appendingPathComponent("dsh_payload.bin")
         let versionURL = resources.appendingPathComponent("dsh-dist.version")
 
-        precondition(FileManager.default.fileExists(atPath: bootstrap.path),
-                     "missing bootstrap.js in app bundle")
-        precondition(FileManager.default.fileExists(atPath: archive.path),
-                     "missing dsh_payload.bin in app bundle")
-        precondition(FileManager.default.fileExists(atPath: versionURL.path),
-                     "missing dsh-dist.version in app bundle")
+        // Swift-side diagnostic: record resource presence + the paths node gets,
+        // so if node never writes a log we can tell whether the app even reached
+        // node_start and whether the bundle contained the resources.
+        let bootstrapExists = FileManager.default.fileExists(atPath: bootstrap.path)
+        let archiveExists = FileManager.default.fileExists(atPath: archive.path)
+        let versionExists = FileManager.default.fileExists(atPath: versionURL.path)
+        let swiftProbe = (Self.dshHome() as NSString).appendingPathComponent("dsh-swift-probe.txt")
+        let swiftLog = "bootstrap=\(bootstrapExists) archive=\(archiveExists) version=\(versionExists)\n" +
+            "bootstrapPath=\(bootstrap.path)\narchivePath=\(archive.path)\nversionPath=\(versionURL.path)\n" +
+            "resources=\(resources.path)\n"
+        try? swiftLog.write(toFile: swiftProbe, atomically: true, encoding: .utf8)
+
+        precondition(bootstrapExists, "missing bootstrap.js in app bundle")
+        precondition(archiveExists, "missing dsh_payload.bin in app bundle")
+        precondition(versionExists, "missing dsh-dist.version in app bundle")
         let version = (try? String(contentsOf: versionURL, encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
         precondition(!version.isEmpty && version != "unknown", "invalid dsh-dist.version")

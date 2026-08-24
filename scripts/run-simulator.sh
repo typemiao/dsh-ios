@@ -75,6 +75,10 @@ echo "---- dsh-probe (if any) ----"
 find "$DATA_DIR" -name 'dsh-probe.txt' 2>/dev/null | while read -r f; do
   echo "== $f =="; cat "$f" 2>/dev/null || true
 done
+echo "---- dsh-swift-probe (if any) ----"
+find "$DATA_DIR" -name 'dsh-swift-probe.txt' 2>/dev/null | while read -r f; do
+  echo "== $f =="; cat "$f" 2>/dev/null || true
+done
 echo "---- dsh-runtime dir (if any) ----"
 find "$DATA_DIR" -type d -name 'dsh-runtime' 2>/dev/null | head -1 | while read -r d; do echo "$d"; ls -la "$d" 2>/dev/null | head -8 || true; done
 
