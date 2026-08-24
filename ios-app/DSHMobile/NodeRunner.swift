@@ -28,6 +28,15 @@ final class NodeRunner {
         return base.appendingPathComponent("node-console.log").path
     }
 
+    /// Writable dsh workspace: Documents/workspace, exposed to the Files app via
+    /// UIFileSharingEnabled so the user can drop files into it.
+    static func dshWorkspace() -> String {
+        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let workspace = base.appendingPathComponent("workspace", isDirectory: true)
+        try? FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        return workspace.path
+    }
+
     /// Versioned runtime destination for the extracted, re-creatable dsh payload.
     static func runtimePath(version: String) -> String {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -93,6 +102,7 @@ final class NodeRunner {
         setenv("DSH_CONSOLE_LOG", consoleLog, 1)
         setenv("DSH_PHASE", phase, 1)
         setenv("DSH_PROBE", probeLog, 1)
+        setenv("DSH_WORKSPACE", Self.dshWorkspace(), 1)
 
         // Keep a strong reference so the tailer keeps reading while the app runs.
         ConsoleTailer.shared.start(logPath: consoleLog)

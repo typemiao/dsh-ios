@@ -35,6 +35,10 @@ const VERSION = env.DSH_VERSION || process.argv[4] || ''
 const DSH_HOME = env.DSH_HOME || process.argv[5] || ''
 const CONSOLE_LOG = env.DSH_CONSOLE_LOG || process.argv[6] || ''
 const PHASE = env.DSH_PHASE || process.argv[7] || '1'
+// dsh's sandbox-policy uses process.cwd() as the workspace root. Set it to a
+// writable, on-disk Documents/workspace so the app's own folder is the dsh
+// workspace and is reachable from the iOS Files app (UIFileSharingEnabled).
+const WORKSPACE = env.DSH_WORKSPACE || ''
 
 function mirror(level, ...args) {
   const line = `[${new Date().toISOString()}] ${level} ${args.map(String).join(' ')}`
@@ -288,6 +292,11 @@ try {
   mirror('LOG', 'unpack begin')
   await install()
   mirror('LOG', 'unpack done — booting dsh from', RUNTIME)
+  if (WORKSPACE) {
+    mkdirSync(WORKSPACE, { recursive: true })
+    process.chdir(WORKSPACE)
+    mirror('LOG', 'workspace =', process.cwd())
+  }
   await import(pathToFileURL(join(RUNTIME, 'main.js')).href)
 } catch (error) {
   mirror('FATAL', error?.stack ?? error)
