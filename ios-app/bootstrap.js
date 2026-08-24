@@ -174,7 +174,9 @@ async function extractTarGz(archive, root) {
         pendingSymlinks.push({ path, target: linkName })
         current = { kind: 'skip', remaining: size, padding }
       } else if (type === '1') {
-        pendingHardlinks.push({ path, target: destination(root, linkName) })
+        // Keep the raw linkname; resolveHardlinks re-anchors it to root and
+        // retries until the target exists (it may appear later in the archive).
+        pendingHardlinks.push({ path, target: linkName })
         current = { kind: 'skip', remaining: size, padding }
       } else if (type === '0' || type === '\0' || type === '7') {
         removeIfPresent(path)
@@ -190,11 +192,30 @@ async function extractTarGz(archive, root) {
 }
 
 function resolveHardlinks(root, pending) {
-  for (const { path, target } of pending) {
-    mkdirSync(dirname(path), { recursive: true })
-    removeIfPresent(path)
-    if (!existsSync(target)) fail(`hardlink target missing: ${relative(root, target)}`)
-    linkSync(target, path)
+  // pnpm records a hardlink entry whose target may appear later in the archive,
+  // and the linkname uses './'-relative or absolute-to-root form. Loop until no
+  // progress; a hardlink whose target never materialises is a hard archive error.
+  let remaining = pending
+  for (let pass = 0; pass < 10 && remaining.length > 0; pass++) {
+    const deferred = []
+    let progressed = false
+    for (const { path, target } of remaining) {
+      mkdirSync(dirname(path), { recursive: true })
+      const resolved = destination(root, target)
+      if (existsSync(resolved)) {
+        removeIfPresent(path)
+        linkSync(resolved, path)
+        progressed = true
+      } else {
+        deferred.push({ path, target })
+      }
+    }
+    remaining = deferred
+    if (!progressed) break
+  }
+  if (remaining.length > 0) {
+    const { path, target } = remaining[0]
+    fail(`hardlink target missing: ${relative(root, destination(root, target))} (for ${relative(root, path)})`)
   }
 }
 
