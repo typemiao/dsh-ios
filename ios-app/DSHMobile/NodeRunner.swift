@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import NodeMobile
 
 /**
@@ -71,7 +72,7 @@ final class NodeRunner {
         let dshHome = Self.dshHome()
         let consoleLog = Self.nodeConsoleLogPath()
         let phase = ProcessInfo.processInfo.environment["DSH_IOS_PHASE"] ?? "1"
-        let probeLog = join(dshHome, "dsh-probe.txt")
+        let probeLog = (dshHome as NSString).appendingPathComponent("dsh-probe.txt")
         setenv("DSH_ARCHIVE", archive.path, 1)
         setenv("DSH_RUNTIME", runtime, 1)
         setenv("DSH_VERSION", version, 1)
