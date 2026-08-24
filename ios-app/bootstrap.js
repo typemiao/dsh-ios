@@ -17,10 +17,25 @@ import {
   symlinkSync,
   writeFileSync,
   writeSync,
+  appendFileSync,
 } from 'node:fs'
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createGunzip } from 'node:zlib'
+
+// Unconditional diagnostic probe: writes argv and the DSH_* env to DSH_PROBE so
+// a device run that silently produces no node-console.log still tells us what
+// node actually saw (which channel — argv or env — carried the config).
+try {
+  const probe = process.env.DSH_PROBE || join(process.env.HOME || '/tmp', 'dsh-bootstrap-probe.txt')
+  appendFileSync(probe, 'argv=' + JSON.stringify(process.argv) + '\n')
+  appendFileSync(probe, 'env=' + JSON.stringify({
+    DSH_ARCHIVE: process.env.DSH_ARCHIVE, DSH_RUNTIME: process.env.DSH_RUNTIME,
+    DSH_VERSION: process.env.DSH_VERSION, DSH_HOME: process.env.DSH_HOME,
+    DSH_CONSOLE_LOG: process.env.DSH_CONSOLE_LOG, DSH_PHASE: process.env.DSH_PHASE,
+    DSH_PROBE: process.env.DSH_PROBE, HOME: process.env.HOME,
+  }) + '\n')
+} catch (_) {}
 
 // Config arrives via env vars (see NodeRunner.swift): position-independent, and
 // avoids relying on process.argv[0] being "node" (nodejs-mobile makes it the

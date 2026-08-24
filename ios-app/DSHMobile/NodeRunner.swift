@@ -65,22 +65,35 @@ final class NodeRunner {
         precondition(!version.isEmpty && version != "unknown", "invalid dsh-dist.version")
         let runtime = Self.runtimePath(version: version)
 
-        // Inject config so bootstrap.js reads process.env.DSH_* — position-independent.
+        // Pass config BOTH as env vars and as trailing argv (nodejs-mobile's
+        // process.argv semantics are uncertain on device; the probe will confirm
+        // which channel node actually sees). position independent.
+        let dshHome = Self.dshHome()
+        let consoleLog = Self.nodeConsoleLogPath()
+        let phase = ProcessInfo.processInfo.environment["DSH_IOS_PHASE"] ?? "1"
+        let probeLog = join(dshHome, "dsh-probe.txt")
         setenv("DSH_ARCHIVE", archive.path, 1)
         setenv("DSH_RUNTIME", runtime, 1)
         setenv("DSH_VERSION", version, 1)
-        setenv("DSH_HOME", Self.dshHome(), 1)
-        setenv("DSH_CONSOLE_LOG", Self.nodeConsoleLogPath(), 1)
-        setenv("DSH_PHASE", ProcessInfo.processInfo.environment["DSH_IOS_PHASE"] ?? "1", 1)
+        setenv("DSH_HOME", dshHome, 1)
+        setenv("DSH_CONSOLE_LOG", consoleLog, 1)
+        setenv("DSH_PHASE", phase, 1)
+        setenv("DSH_PROBE", probeLog, 1)
 
         // Keep a strong reference so the tailer keeps reading while the app runs.
-        ConsoleTailer.shared.start(logPath: Self.nodeConsoleLogPath())
+        ConsoleTailer.shared.start(logPath: consoleLog)
 
         engineThread = Thread { [weak self] in
             guard let self else { return }
             var argv: [UnsafeMutablePointer<CChar>?] = [
                 strdup("node"),
                 strdup(bootstrap.path),
+                strdup(archive.path),
+                strdup(runtime),
+                strdup(version),
+                strdup(dshHome),
+                strdup(consoleLog),
+                strdup(phase),
             ]
             argv.append(nil)
             self.exitCode = node_start(Int32(argv.count - 1), &argv)

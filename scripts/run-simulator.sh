@@ -71,6 +71,12 @@ echo "---- node console (full) ----"
 if [ -f "$LOG" ]; then cat "$LOG" 2>/dev/null || echo "(unreadable)"; else echo "(no log at $LOG)"; fi
 echo "---- other node-console.log locations ----"
 find "$DATA_DIR" -name 'node-console.log' 2>/dev/null | head -5 || true
+echo "---- dsh-probe (if any) ----"
+find "$DATA_DIR" -name 'dsh-probe.txt' 2>/dev/null | while read -r f; do
+  echo "== $f =="; cat "$f" 2>/dev/null || true
+done
+echo "---- dsh-runtime dir (if any) ----"
+find "$DATA_DIR" -type d -name 'dsh-runtime' 2>/dev/null | head -1 | while read -r d; do echo "$d"; ls -la "$d" 2>/dev/null | head -8 || true; done
 
 # 5. gate on the phase's success marker (CI needs a hard pass/fail)
 case "$PHASE" in
