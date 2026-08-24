@@ -214,48 +214,30 @@ for name, target in real.items():
     os.symlink(os.path.relpath(target, top), os.path.join(top, name.split('/')[1]))
 print("top-level @deepseek-ai links:", len(real))
 
-# 3c. dereference EVERY symlink in the payload. The deployed QA IPA carries
-# 2604 symlinks (pnpm store <-> node_modules links), and Sideloadly's re-sign
-# then installs them differently than they were packaged, so the code-signature
-# audit sees a resource as added/modified/deleted -> installd fails with
-# 0xe8008017 (A signed resource has been added, modified, or deleted). Replace
-# every symlink (regardless of target locality) with a real copy of its target
-# so the payload is symlink-free and the signed resource set is stable.
-#
-# Walk with followlinks=False so a symlinked dir is never descended; instead it
-# is unlinked and its TARGET tree is copied in place. copytree(..., False)
-# dereferences nested symlinks recursively. Loop until no symlink remains.
+# 3c. dereference symlinks that ESCAPE the payload. pnpm links workspace deps
+# (schemastery, cosmokit, ...) into the store with absolute/relative chains
+# into the checkout. They are valid while the checkout exists (the Linux smoke
+# test), but iOS installd rejects them when they are inside the app bundle.
+# Replace every symlink whose resolved target leaves the payload with a real
+# copy of its target.
 stage_real = os.path.realpath('.')
 deref = 0
-for _pass in range(30):
-    pass_deref = 0
-    # Disable the symlink guard: we WANT to walk the tree we're rewriting each
-    # pass, but never follow a symlink as a dir (followlinks=False handles that).
-    seen_link_dirs = set()
-    for root, dirs, files in os.walk('.', followlinks=False):
-        for name in list(dirs):
-            p = os.path.join(root, name)
-            if not os.path.islink(p):
-                continue
-            target = os.path.realpath(p)
-            print("deref dir:", p)
-            os.unlink(p)
-            shutil.copytree(target, p, symlinks=False)
-            pass_deref += 1
-            deref += 1
-        for name in list(files):
-            p = os.path.join(root, name)
-            if not os.path.islink(p):
-                continue
-            target = os.path.realpath(p)
-            print("deref file:", p)
-            os.unlink(p)
+for root, dirs, files in os.walk('.'):
+    for name in list(dirs) + list(files):
+        p = os.path.join(root, name)
+        if not os.path.islink(p):
+            continue
+        target = os.path.realpath(p)
+        if target.startswith(stage_real):
+            continue
+        print("deref escapee:", p)
+        os.unlink(p)
+        if os.path.isdir(target):
+            shutil.copytree(target, p, symlinks=True)
+        elif os.path.isfile(target):
             shutil.copy2(target, p)
-            pass_deref += 1
-            deref += 1
-    if pass_deref == 0:
-        break
-print("deref all symlinks:", deref)
+        deref += 1
+print("deref escapee links:", deref)
 PYEOF
 
 # sanity (post-repair): the bundle/profile packages and the web UI must be present
