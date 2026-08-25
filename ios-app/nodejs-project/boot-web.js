@@ -71,6 +71,21 @@ function iosOverlay(dshHome) {
       id: 'session-persistence-jsonl',
       config: { root: join(dshHome, 'sessions'), compression: 'none' },
     },
+    // The preset roster. The web-app layer ships `default: standard` but no
+    // roots; the CLI's composeProfile is what injects the shipped root (the
+    // config/agent-presets beside the app's own config, an assembly fact). Our
+    // manual boot skips composeProfile, so the roster resolves to no preset at
+    // all (`available: none`) and the UI cannot create a session. Restate the
+    // shipped system root here. A patch REPLACES the row's whole config, so
+    // `default` is restated too; `includeUserRoot` (which appends
+    // $DSH_HOME/.agent-presets as a user root) is a schema default and survives.
+    {
+      id: 'agent-presets',
+      config: {
+        default: 'standard',
+        roots: [{ path: SHIPPED_PRESET_ROOT, trust: 'system' }],
+      },
+    },
   ]
 }
 
