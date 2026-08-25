@@ -9,9 +9,9 @@ import WebKit
  * log (and probes) to Documents and opens a share sheet, so the log can be sent
  * back to the developer without any device-side shell.
  */
-final class WebViewController: UIViewController {
+final class WebViewController: UIViewController, WKScriptMessageHandler {
 
-    private let webView = WKWebView(frame: .zero)
+    private var webView: WKWebView!
     private let statusLabel = UILabel()
     private let progressLabel = UILabel()
     private let exportButton = UIButton(type: .system)
@@ -24,10 +24,37 @@ final class WebViewController: UIViewController {
         return base.appendingPathComponent("node-console.log").path
     }
 
+    private var webConsoleLogPath: String {
+        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return base.appendingPathComponent("dsh-web-console.log").path
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
 
         view.backgroundColor = .systemBackground
+
+        // Build the webview with a content controller that mirrors JS console
+        // output (and uncaught errors) back to Swift, so a dsh UI action that
+        // silently fails is visible in the exported diagnostics.
+        let config = WKWebViewConfiguration()
+        let userController = WKUserContentController()
+        userController.add(self, name: "dshLog")
+        let mirrorJS = """
+        (function(){
+          function send(t){ try{ window.webkit.messageHandlers.dshLog.postMessage(t) }catch(e){} }
+          const origErr = console.error, origWarn = console.warn, origLog = console.log;
+          console.error = function(){ send('error ' + Array.prototype.slice.call(arguments).join(' ')); origErr.apply(console, arguments) };
+          console.warn  = function(){ send('warn '  + Array.prototype.slice.call(arguments).join(' ')); origWarn.apply(console, arguments) };
+          console.log   = function(){ send('log '   + Array.prototype.slice.call(arguments).join(' ')); origLog.apply(console, arguments) };
+          window.onerror = function(m, s, l, c, e){ send('onerror ' + m + ' @' + s + ':' + l) };
+          window.addEventListener('unhandledrejection', function(ev){ send('unhandledrejection ' + (ev && ev.reason ? String(ev.reason) : '?')) });
+        })();
+        """
+        userController.addUserScript(WKUserScript(source: mirrorJS, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        config.userContentController = userController
+        let mkWebView = WKWebView(frame: .zero, configuration: config)
+        webView = mkWebView
 
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.numberOfLines = 0
@@ -117,13 +144,35 @@ final class WebViewController: UIViewController {
         progressLabel.text = tail.isEmpty ? "(log empty)" : tail
     }
 
+    /// Mirror WKWebView JS console/error messages into a file so a dsh UI
+    /// action that silently fails (workspace select / new session) is visible.
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let text = message.body as? String else { return }
+        let line = "[\(ISO8601())] \(text)\n"
+        if let data = line.data(using: .utf8) {
+            let url = URL(fileURLWithPath: webConsoleLogPath)
+            if let handle = try? FileHandle(forWritingTo: url) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                try? handle.close()
+            } else {
+                try? line.write(to: url, atomically: true, encoding: .utf8)
+            }
+        }
+    }
+
+    private func ISO8601() -> String {
+        let formatter = ISO8601DateFormatter()
+        return formatter.string(from: Date())
+    }
+
     /// Write the console log + probes to Documents and hand a share sheet so the
     /// log can be exported (AirDrop / Files / etc) without a device shell.
     @objc private func exportDiagnostics() {
         let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let export = base.appendingPathComponent("dsh-diagnostics.txt")
         var payload = ""
-        for path in [consoleLogPath] {
+        for path in [consoleLogPath, webConsoleLogPath] {
             if let log = try? String(contentsOfFile: path, encoding: .utf8) {
                 payload += "===== \(path) =====\n\(log)\n\n"
             } else {
