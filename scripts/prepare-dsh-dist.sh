@@ -62,6 +62,47 @@ if os.path.exists(p):
     print('patched py-types.ts XID regexes (ASCII-safe)')
 PY
 
+# -- 0c. timezone canonicalization for the intl-less iOS runtime --------------
+# nodejs-mobile is built with --with-intl=none (no ICU tzdata), so
+# `new Intl.DateTimeFormat('en-US', { timeZone })` throws for ANY named zone --
+# including the valid `Asia/Shanghai` the WKWebView browser sends as its
+# clientTimeZone. The api-proxy's canonicalClientTimeZone() then catches and
+# returns undefined, and the RPC rejects the message with
+# `clientTimeZone must be UTC or a valid IANA Area/Location name
+# (invalid-time-zone)`, so no message can be sent. On iOS the browser-supplied
+# value is already a canonical IANA name (the browser's own Intl produced it),
+# so the api-proxy should accept it on Intl failure. Keep the strict reject on
+# every other platform (where Intl works, an unresolvable zone is genuinely
+# invalid), so the Linux smoke and real timezone validation are unchanged.
+python3 - <<'PYTZ'
+import os, sys
+p = 'packages/host/apiproxy/src/api-proxy.ts'
+if not os.path.exists(p):
+    # source path differs (e.g. tsdown entry) -- fail loud so a layout change
+    # cannot silently ship an unpatched api-proxy again.
+    print('FATAL: api-proxy.ts not found for timezone patch', file=sys.stderr)
+    sys.exit(1)
+s = open(p, encoding='utf-8').read()
+old = """  } catch {
+    // Intl rejects unsupported zone names; the RPC maps that parser rejection below.
+    return undefined
+  }"""
+new = """  } catch {
+    // nodejs-mobile (--with-intl=none) has no ICU tzdata, so Intl cannot resolve a
+    // browser-supplied IANA zone even when valid. Only the iOS payload reaches this
+    // catch for a legitimate zone; accept the already-format-validated value there,
+    // and keep rejecting on platforms where Intl works (an unresolvable zone is then
+    // genuinely invalid).
+    return process.platform === 'ios' ? value : undefined
+  }"""
+if old not in s:
+    print('FATAL: canonicalClientTimeZone catch block not found in api-proxy.ts', file=sys.stderr)
+    sys.exit(1)
+s = s.replace(old, new, 1)
+open(p, 'w', encoding='utf-8').write(s)
+print('patched api-proxy.ts clientTimeZone canonicalization (iOS intl-none fallback)')
+PYTZ
+
 # -- 0b. pnpm 11 deploy compatibility ----------------------------------------
 # pnpm >=11 ships a new deploy engine that fails on this workspace
 # ("Deployment with a shared lockfile has failed") unless the legacy deploy
