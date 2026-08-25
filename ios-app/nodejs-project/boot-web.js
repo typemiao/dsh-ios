@@ -10,6 +10,9 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
+import { request as httpRequest } from 'node:http'
+import { request as httpsRequest } from 'node:https'
+import { Readable } from 'node:stream'
 import {
   boot,
   healProfilesModuleFallback,
@@ -52,6 +55,81 @@ const BIN_NAME = 'dsh'
  * the desktop smoke asserts the exact cordis-import path, not an iOS tree.
  */
 const IS_IOS = process.platform === 'ios'
+/**
+ * iOS (nodejs-mobile) global fetch shim. nodejs-mobile's Node build has no
+ * WebAssembly, and undici's llhttp HTTP/1.1 parser is WASM, so the built-in
+ * global fetch throws for every outbound request (nodejs-mobile/nodejs-mobile
+ * #71). The DeepSeek adapter, web-search, and any other fetch user then fail
+ * as a bare TRANSPORT "request failed". Install a fetch backed by node:http /
+ * node:https (core modules, no WASM) on iOS only; every other platform keeps
+ * the real fetch. The body is a live Web ReadableStream (Readable.toWeb) so
+ * SSE and .json()/.text() both work — only one of them is consumed per
+ * request, which is the fetch contract.
+ */
+function installIosFetch() {
+  const readBytes = async (web) => {
+    const reader = web.getReader()
+    const chunks = []
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(Buffer.from(value))
+    }
+    return Buffer.concat(chunks)
+  }
+  const readText = async (web) => (await readBytes(web)).toString('utf-8')
+  globalThis.fetch = (input, init = {}) => new Promise((resolve, reject) => {
+    const url = new URL(typeof input === 'string' ? input : input.url)
+    const method = (init.method ?? 'GET').toUpperCase()
+    const requestFn = url.protocol === 'https:' ? httpsRequest : httpRequest
+    // node:https wants a plain object or entries array; normalize a Headers-like.
+    const rawHeaders = init.headers
+    const headers = rawHeaders && typeof rawHeaders.entries === 'function'
+      ? Object.fromEntries(rawHeaders.entries())
+      : (rawHeaders ?? undefined)
+    const req = requestFn(url, { method, headers }, (res) => {
+      const body = Readable.toWeb(res)
+      const status = res.statusCode ?? 0
+      const responseHeaders = {
+        get: (name) => {
+          const value = res.headers[String(name).toLowerCase()]
+          return Array.isArray(value) ? value[0] : (value ?? null)
+        },
+      }
+      resolve({
+        ok: status >= 200 && status < 300,
+        status,
+        statusText: res.statusMessage ?? '',
+        url: url.href,
+        headers: responseHeaders,
+        body,
+        arrayBuffer: async () => {
+          const b = await readBytes(body)
+          return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)
+        },
+        text: () => readText(body),
+        json: async () => JSON.parse(await readText(body)),
+      })
+    })
+    req.on('error', reject)
+    if (init.signal) {
+      if (init.signal.aborted) req.destroy(new Error('Aborted'))
+      else init.signal.addEventListener('abort', () => req.destroy(new Error('Aborted')), { once: true })
+    }
+    if (init.body != null) {
+      const b = init.body
+      // Write the body without `for await` (the Promise executor is not async).
+      if (typeof b === 'string' || Buffer.isBuffer(b)) req.write(b)
+      else if (b.constructor?.name === 'URLSearchParams') req.write(b.toString())
+      else if (typeof b.getReader === 'function') Readable.fromWeb(b).pipe(req)
+      else if (typeof b.pipe === 'function') b.pipe(req)
+      else if (typeof b[Symbol.asyncIterator] === 'function') Readable.from(b).pipe(req)
+      else req.write(JSON.stringify(b))
+    }
+    req.end()
+  })
+}
+if (IS_IOS) installIosFetch()
 /**
  * iOS overlay rows, built at boot time so `root` resolves against the launched
  * DSH_HOME (the base row's `dshHomePath('sessions')` is lazy; evaluating it at
