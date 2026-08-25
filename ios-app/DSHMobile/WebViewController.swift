@@ -50,11 +50,16 @@ final class WebViewController: UIViewController {
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.isHidden = true
 
+        view.addSubview(webView)
         view.addSubview(statusLabel)
         view.addSubview(progressLabel)
         view.addSubview(exportButton)
-        view.addSubview(webView)
         NSLayoutConstraint.activate([
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+
             statusLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             statusLabel.topAnchor.constraint(equalTo: view.centerYAnchor, constant: -60),
             statusLabel.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
@@ -65,14 +70,12 @@ final class WebViewController: UIViewController {
             progressLabel.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
             progressLabel.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
 
-            exportButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            exportButton.topAnchor.constraint(equalTo: progressLabel.bottomAnchor, constant: 16),
-
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            // Floating export button pinned to the top-right so it is reachable
+            // even after dsh loads (over the webview), not just during startup.
+            exportButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+            exportButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8),
         ])
+        view.bringSubviewToFront(exportButton)
 
         pollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.poll()
@@ -90,7 +93,7 @@ final class WebViewController: UIViewController {
                 if let http = response as? HTTPURLResponse, http.statusCode < 500 {
                     self.statusLabel.isHidden = true
                     self.progressLabel.isHidden = true
-                    self.exportButton.isHidden = true
+                    self.exportButton.isHidden = false   // keep reachable; dsh boot errors land in the log
                     self.webView.isHidden = false
                     self.pollTimer?.invalidate()
                     self.webView.load(URLRequest(url: self.url))
