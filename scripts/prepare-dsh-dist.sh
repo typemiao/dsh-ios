@@ -92,8 +92,10 @@ new = """  } catch {
     // browser-supplied IANA zone even when valid. Only the iOS payload reaches this
     // catch for a legitimate zone; accept the already-format-validated value there,
     // and keep rejecting on platforms where Intl works (an unresolvable zone is then
-    // genuinely invalid).
-    return process.platform === 'ios' ? value : undefined
+    // genuinely invalid). String(process.platform) keeps the compare type-safe --
+    // NodeJS.Platform does not include 'ios', so a bare === 'ios' is a strict-mode
+    // type error.
+    return String(process.platform) === 'ios' ? value : undefined
   }"""
 if old not in s:
     print('FATAL: canonicalClientTimeZone catch block not found in api-proxy.ts', file=sys.stderr)
