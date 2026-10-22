@@ -82,10 +82,17 @@ final class WebViewController: UIViewController, WKScriptMessageHandler {
         view.addSubview(progressLabel)
         view.addSubview(exportButton)
         NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            // Pin the web content to the safe area, not the raw view: the dsh
+            // web shell renders a desktop-first three-column frame and its own
+            // CSS does not consume env(safe-area-inset-*), so a full-bleed
+            // WKWebView would put the top bar / input under the notch and home
+            // indicator. Constraining to the safe area keeps every control
+            // reachable on device; the shell still collapses its own sidebar
+            // below 1024px (viewport width is unchanged).
+            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
 
             statusLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             statusLabel.topAnchor.constraint(equalTo: view.centerYAnchor, constant: -60),
