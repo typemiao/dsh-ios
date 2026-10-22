@@ -62,6 +62,59 @@ if os.path.exists(p):
     print('patched py-types.ts XID regexes (ASCII-safe)')
 PY
 
+# -- 0d. iOS read resilience: TextDecoder fallback in the fs-local read path ---
+# read fails while write works because the read path (readWholeText -> decodeUtf8)
+# uses `new TextDecoder('utf-8', { fatal: true })` with NO fallback, whereas the
+# write path's diff-basis read (readTextForDiff) wraps the same call in
+# try/catch -> null, so a broken decoder only degrades the diff and the write
+# still succeeds. Under the jitless / --with-intl=none iOS build TextDecoder may
+# be absent or its strict `fatal` decode may throw on valid UTF-8. Route the
+# one-shot decode through a Buffer-backed fallback so a read never dies on a
+# broken primitive; the upstream NUL-byte sample still rejects binary files.
+# (Streaming decode and readFile fallbacks are tracked separately — see issue.)
+python3 - <<'PY'
+import os
+p = 'packages/fs/fs-local/src/fsio.ts'
+if os.path.exists(p):
+    s = open(p, encoding='utf-8').read()
+    before = s
+    # 1) route decodeUtf8's one-shot decode through the fallback helper
+    s = s.replace(
+        "return new TextDecoder('utf-8', { fatal: true }).decode(buffer)",
+        "return iosSafeDecodeUtf8(buffer, verb, displayPath)",
+    )
+    # 2) define the helper just above decodeUtf8
+    anchor = "function decodeUtf8(buffer: Uint8Array, verb: 'read' | 'edit', displayPath: string): string {"
+    helper = (
+        "// iOS (nodejs-mobile, --with-intl=none): TextDecoder may be absent or its\n"
+        "// strict `fatal` decode may throw on valid UTF-8. Buffer's decoder is always\n"
+        "// present and never throws; fall back to it so a read never dies on a broken\n"
+        "// primitive. The upstream NUL-byte sample still rejects binary files.\n"
+        "function iosSafeDecodeUtf8(buffer: Uint8Array, verb: 'read' | 'edit', displayPath: string): string {\n"
+        "  try {\n"
+        "    return new TextDecoder('utf-8', { fatal: true }).decode(buffer)\n"
+        "  } catch (error: unknown) {\n"
+        "    try {\n"
+        "      return Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength).toString('utf8')\n"
+        "    } catch {\n"
+        "      /* v8 ignore next 2 */\n"
+        "      if (!(error instanceof TypeError)) throw error\n"
+        "      throw notTextError(verb, displayPath)\n"
+        "    }\n"
+        "  }\n"
+        "}\n"
+    )
+    if anchor in s:
+        s = s.replace(anchor, helper + anchor, 1)
+    if s != before:
+        open(p, 'w', encoding='utf-8').write(s)
+        print('patched fsio.ts decodeUtf8 with iOS TextDecoder fallback')
+    else:
+        print('fsio.ts decodeUtf8: no change (already patched or anchors missing)')
+else:
+    print('fsio.ts not found; skipping iOS decode fallback patch')
+PY
+
 # -- 0c. timezone canonicalization for the intl-less iOS runtime --------------
 # nodejs-mobile is built with --with-intl=none (no ICU tzdata), so
 # `new Intl.DateTimeFormat('en-US', { timeZone })` throws for ANY named zone --
